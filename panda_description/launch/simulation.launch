@@ -1,0 +1,18 @@
+<launch>
+  <arg name="debug" default="false"/>
+  <arg name="rviz" default="false"/>
+  <arg name="controller" default="true" />
+  <arg name="gui" default="true"/>
+  <arg name="run_mode" default="simulation"/>
+  <arg name="pub_mode" default="true"/>
+  <arg name="urdfDampingmodel" default="false"/>
+
+  <node name="mujoco_ros" pkg="mujoco_ros" type="mujoco_ros" required="true" respawn="false" output="screen">
+    <param name="license" type="string" value="$(env HOME)/mjkey.txt" />
+    <param name="model_file" type="string" value="$(find panda_description)/franka_panda.xml"/>
+    <param name="pub_mode" value="$(arg pub_mode)"/>
+  </node>
+
+  <node name="panda_controller" pkg="panda_controller" type="panda_controller" output="screen" required="true">
+  </node>
+</launch>
