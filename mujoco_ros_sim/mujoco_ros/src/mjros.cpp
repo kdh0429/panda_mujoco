@@ -488,6 +488,10 @@ void mycontroller(const mjModel *m, mjData *d)
             else
             {
                 memcpy(ctrl_command, &command[0], m->nu * sizeof(float));
+                for (int i = 0; i < m->nu; i++)
+                {
+                   ctrl_command[i] = command[i];
+                }
             }
             // for (int i = 0; i < m->nu; i++)
             // {
@@ -512,7 +516,6 @@ void mycontroller(const mjModel *m, mjData *d)
                     mju_copy(d->xfrc_applied, ctrl_command2, m->nbody * 6);
                 }
             }
-
             ROS_INFO_COND(settings.debug == 1, "MJ_TIME:%10.5f ros:%10.5f dif:%10.5f", d->time, ros_sim_runtime.toSec(), d->time - ros_sim_runtime.toSec());
             ROS_INFO_COND(settings.debug == 1, "TEST FOR THERE ");
 

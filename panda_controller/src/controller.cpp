@@ -3,6 +3,10 @@
 PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc) : dc_(dc)
 {
     dc_.sim_mode_ = "torque";
+    
+    std::string urdf_name = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
+    std::cout<<"Model name: " << urdf_name <<std::endl;
+    RigidBodyDynamics::Addons::URDFReadFromFile(urdf_name.c_str(), &robot_, false, false);
 }
 
 PandaController::~PandaController()
@@ -23,10 +27,15 @@ void PandaController::compute()
                 q_.setZero();
                 q_dot_.resize(dc_.num_dof_);
                 q_dot_.setZero();
+                q_dot_zero_.resize(dc_.num_dof_);
+                q_dot_zero_.setZero();
                 effort_.resize(dc_.num_dof_);
                 effort_.setZero();
                 control_input_.resize(dc_.num_dof_);
                 control_input_.setZero();
+
+                g_.resize(dc_.num_dof_);
+                g_.setZero();
 
                 is_init_ = true;
             }
@@ -47,18 +56,15 @@ void PandaController::compute()
 
 void PandaController::updateKinematicsDynamics()
 {
-
+    RigidBodyDynamics::NonlinearEffects(robot_, q_, q_dot_zero_, g_);
 }
 
 void PandaController::computeControlInput()
 {
-    control_input_(0) = 50;
-    control_input_(1) = 50;
-    control_input_(2) = 50;
-    control_input_(3) = 50;
-    control_input_(4) = 50;
-    control_input_(5) = 50;
-    control_input_(6) = 50;
+    for (int i = 0; i <dc_.num_dof_; i++)
+    {
+        control_input_(i) = g_(i);
+    }
 
     m_ci_.lock();
     dc_.control_input_ = control_input_;

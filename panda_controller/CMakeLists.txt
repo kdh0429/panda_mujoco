@@ -10,6 +10,7 @@ project(panda_controller)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
   std_msgs
   mujoco_ros
   eigen_conversions
