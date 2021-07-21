@@ -4,6 +4,7 @@
 #include <random>
 
 #include <ros/ros.h>
+#include <ros/console.h>
 #include <ros/package.h>
 
 #include "mujoco_ros_msgs/JointSet.h"
@@ -30,6 +31,7 @@ class PandaController{
         void initMoveit();
         void setMoveitObstables();
         void generateRandTraj();
+        Eigen::Vector3d quintic_spline(double time, double time_0, double time_f, double x_0, double x_dot_0, double x_ddot_0, double x_f, double x_dot_f, double x_ddot_f);
 
     private:
         std::mutex m_dc_;
@@ -43,14 +45,21 @@ class PandaController{
         // Robot State
         Eigen::VectorXd q_;
         Eigen::VectorXd q_dot_;
-        Eigen::VectorXd q_dot_zero_;
         Eigen::VectorXd effort_;
+
+        // Control
+        Eigen::VectorXd qddot_desired_;
+        Eigen::VectorXd qdot_desired_;
+        Eigen::VectorXd q_desired_;
+
+        double kv, kp;
 
         Eigen::VectorXd control_input_;
 
         // Kinematics & Dynamics
         RigidBodyDynamics::Model robot_;
-        Eigen::VectorXd g_;   
+        Eigen::VectorXd non_linear_;
+        Eigen::MatrixXd A_;
 
         // Moveit
         inline static const std::string PLANNING_GROUP="panda_arm";
@@ -60,4 +69,6 @@ class PandaController{
 
         Eigen::VectorXd q_limit_u_;
         Eigen::VectorXd q_limit_l_;
+
+        double traj_init_time_;
 };
