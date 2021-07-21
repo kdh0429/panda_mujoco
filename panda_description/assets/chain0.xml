@@ -30,7 +30,7 @@
                     <geom class="panda_col" mesh="link3_col" mass="2.04104"/>
                     <body name="panda0_link4" pos="0.0825 0 0" euler="1.57 0 0">
                         <inertial pos="0 0 0" mass="2.08129" diaginertia="0.0000001 0.0000001 0.0000001" />
-                        <joint name="panda0_joint4" range="-3.0718 0.4" class="panda_arm"/>
+                        <joint name="panda0_joint4" range="-3.0718 -0.0698" class="panda_arm"/>
                         <geom class="panda_viz" mesh="link4_viz"/>
                         <geom class="panda_col" mesh="link4_col" mass="2.08129"/>
                         <body name="panda0_link5" pos="-0.0825 0.384 0" euler="-1.57 0 0">

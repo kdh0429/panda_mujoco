@@ -248,7 +248,7 @@
     </inertial>
   </link>
   <joint name="panda_joint6" type="revolute">
-    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-1.6573" soft_upper_limit="3.7525"/>
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-1.6573" soft_upper_limit="2.1127"/>
     <origin rpy="0 -1.57 1.57" xyz="0 0 0"/>
     <parent link="panda_link5"/>
     <child link="panda_link6"/>

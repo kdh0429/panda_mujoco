@@ -14,6 +14,8 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   mujoco_ros
   eigen_conversions
+  moveit_ros_planning_interface
+  moveit_visual_tools
 )
 
 
