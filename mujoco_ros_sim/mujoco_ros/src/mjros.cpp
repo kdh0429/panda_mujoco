@@ -487,7 +487,7 @@ void mycontroller(const mjModel *m, mjData *d)
             }
             else
             {
-                memcpy(ctrl_command, &command[0], m->nu * sizeof(float));
+                // memcpy(ctrl_command, &command[0], m->nu * sizeof(float));
                 for (int i = 0; i < m->nu; i++)
                 {
                    ctrl_command[i] = command[i];

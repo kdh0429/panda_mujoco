@@ -23,17 +23,21 @@
 
 class PandaController{
     public:
-        PandaController(ros::NodeHandle &nh, DataContainer &dc);
+        PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode);
         ~PandaController();
         void compute();
         void updateKinematicsDynamics();
         void computeControlInput();
         void initMoveit();
         void setMoveitObstables();
+        void generateRandTrajThread();
         void generateRandTraj();
         Eigen::Vector3d quintic_spline(double time, double time_0, double time_f, double x_0, double x_dot_0, double x_ddot_0, double x_f, double x_dot_f, double x_ddot_f);
 
     private:
+        double cur_time_;
+        double init_time_;
+
         std::mutex m_dc_;
         std::mutex m_ci_;
         DataContainer &dc_;
@@ -48,8 +52,8 @@ class PandaController{
         Eigen::VectorXd effort_;
 
         // Control
-        Eigen::VectorXd qddot_desired_;
-        Eigen::VectorXd qdot_desired_;
+        Eigen::VectorXd q_ddot_desired_;
+        Eigen::VectorXd q_dot_desired_;
         Eigen::VectorXd q_desired_;
 
         double kv, kp;
@@ -66,9 +70,22 @@ class PandaController{
         moveit::planning_interface::MoveGroupInterface move_group_;
         moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
         moveit::planning_interface::MoveGroupInterface::Plan random_plan_;
+        moveit::planning_interface::MoveGroupInterface::Plan random_plan_next_;
+
+        std::vector<double> q_target_plan_;
+        std::vector<double> q_init_plan_; 
+        std::vector<double> q_dot_plan_;
 
         Eigen::VectorXd q_limit_u_;
         Eigen::VectorXd q_limit_l_;
 
-        double traj_init_time_;
+        double traj_init_time_ = 0.0;
+        double traj_duration_ = 0.0;
+        int total_waypoints_;
+        int cur_waypoint_ = 0;
+
+        bool init_traj_prepared_ = false;
+        bool next_traj_prepared_ = false;
+
+        std::ofstream writeFile;
 };

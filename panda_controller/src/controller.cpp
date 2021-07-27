@@ -1,11 +1,14 @@
 #include "panda_controller/panda_controller.h"
 
-PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc) : dc_(dc), move_group_(PLANNING_GROUP)
+PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc), move_group_(PLANNING_GROUP)
 {
-    ros::console::shutdown();
+    // ros::console::shutdown();
 
-    dc_.sim_mode_ = "torque";
-    
+    if (control_mode == 0)
+        dc_.sim_mode_ = "position";
+    else if (control_mode == 1)
+        dc_.sim_mode_ = "torque";
+
     std::string urdf_name = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
     std::cout<<"Model name: " << urdf_name <<std::endl;
     RigidBodyDynamics::Addons::URDFReadFromFile(urdf_name.c_str(), &robot_, false, false);
@@ -13,6 +16,8 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc) : dc_(d
     ros::AsyncSpinner spinner(1);
     spinner.start();
     initMoveit();
+    // generateRandTraj();
+    writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
 }
 
 PandaController::~PandaController()
@@ -110,53 +115,56 @@ void PandaController::setMoveitObstables()
 
 void PandaController::generateRandTraj()
 {
-    std::vector<double> q_target;
-    std::vector<double> q; 
-    std::vector<double> q_dot; 
-    q_target.resize(dc_.num_dof_-2);
-    q.resize(dc_.num_dof_-2);
-    q_dot.resize(dc_.num_dof_-2);
-
-    moveit::core::RobotState start_state = *(move_group_.getCurrentState());
-    for (int i = 0; i < dc_.num_dof_-2; i++)
+    if (!next_traj_prepared_)
     {
-        q[i] = q_[i];
-        q_dot[i] = q_dot_[i];
-    }
+        moveit::core::RobotState start_state = *(move_group_.getCurrentState());
 
-
-    start_state.setJointGroupPositions(PLANNING_GROUP, q);
-    start_state.setJointGroupVelocities(PLANNING_GROUP, q_dot);
-    move_group_.setStartState(start_state);
-    
-    std::random_device rd;
-    std::default_random_engine rand_seed;
-    std::uniform_real_distribution<double> angles[dc_.num_dof_-2];
-    rand_seed.seed(rd());
-
-    do
-    {
-        double safe_range = 0.0;
-        for (size_t i = 0; i < dc_.num_dof_-2; i++)
+        for (int i = 0; i < dc_.num_dof_-2; i++)
         {
-            safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
-            angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
+            q_init_plan_[i] = q_target_plan_[i];
+            q_dot_plan_[i] = 0.0;
         }
 
-        for (int i = 0; i < dc_.num_dof_-2; i++) 
-            q_target[i] = ((angles[i])(rand_seed));
+        start_state.setJointGroupPositions(PLANNING_GROUP, q_init_plan_);
+        start_state.setJointGroupVelocities(PLANNING_GROUP, q_dot_plan_);
+        move_group_.setStartState(start_state);
+        
+        std::random_device rand_device;
+        std::default_random_engine rand_seed;
+        std::uniform_real_distribution<double> angles[dc_.num_dof_-2];
+        rand_seed.seed(rand_device());
 
-        move_group_.setJointValueTarget(q_target);
-    } 
-    while (move_group_.plan(random_plan_) != moveit::planning_interface::MoveItErrorCode::SUCCESS);
+        do
+        {
+            double safe_range = 0.0;
+            for (size_t i = 0; i < dc_.num_dof_-2; i++)
+            {
+                safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
+                angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
+            }
 
-    std::cout<<"Planning Done" << std::endl;
-    int waypoints = random_plan_.trajectory_.joint_trajectory.points.size();
-    int waypoint = 0;
-    double start_time = random_plan_.trajectory_.joint_trajectory.points[0].time_from_start.toSec();
-    double end_time = random_plan_.trajectory_.joint_trajectory.points[waypoints - 1].time_from_start.toSec();
-    std::cout<<"Start Time: "<< start_time << std::endl;
-    std::cout<<"End Time: " << end_time << std::endl;
+            for (int i = 0; i < dc_.num_dof_-2; i++) 
+                q_target_plan_[i] = ((angles[i])(rand_seed));
+
+            move_group_.setJointValueTarget(q_target_plan_);
+        } 
+        while (move_group_.plan(random_plan_next_) != moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+        next_traj_prepared_ = true;
+        std::cout<<"Trajectory prepared"<<std::endl;
+    }
+}
+
+void PandaController::generateRandTrajThread()
+{
+    ros::Rate r(10);
+    while(ros::ok())
+    {
+        generateRandTraj();
+        if (!init_traj_prepared_)
+            init_traj_prepared_ = true;
+        r.sleep();
+    }
 }
 
 void PandaController::compute()
@@ -177,15 +185,15 @@ void PandaController::compute()
                 effort_.setZero();
 
                 // Control
-                qddot_desired_.resize(dc_.num_dof_);
-                qddot_desired_.setZero();
-                qdot_desired_.resize(dc_.num_dof_);
-                qdot_desired_.setZero();
+                q_ddot_desired_.resize(dc_.num_dof_);
+                q_ddot_desired_.setZero();
+                q_dot_desired_.resize(dc_.num_dof_);
+                q_dot_desired_.setZero();
                 q_desired_.resize(dc_.num_dof_);
                 q_desired_.setZero();
 
-                kp = 1500;
-                kv = 10;
+                kp = 2500;
+                kv = 100;
 
                 control_input_.resize(dc_.num_dof_);
                 control_input_.setZero();
@@ -195,20 +203,25 @@ void PandaController::compute()
                 A_.resize(dc_.num_dof_, dc_.num_dof_);
                 A_.setZero();
 
-                // Joint Limits for Moveit
+                // For Moveit
                 q_limit_l_.resize(dc_.num_dof_-2);
                 q_limit_u_.resize(dc_.num_dof_-2);
                 q_limit_l_ << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0873, -2.8973;
-                q_limit_u_ <<  2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.8223,  2.8973;
-                
-                traj_init_time_ = ros::Time::now().toSec();
+                q_limit_u_ <<  2.8973,  1.7628,  2.8973,  0.0698,  2.8973,  2.1127,  2.8973;
+
+                q_target_plan_.resize(dc_.num_dof_-2);
+                q_init_plan_.resize(dc_.num_dof_-2);
+                q_dot_plan_.resize(dc_.num_dof_-2);
+                std::fill(q_target_plan_.begin(), q_target_plan_.end(), 0);
+                std::fill(q_init_plan_.begin(), q_init_plan_.end(), 0);
+                std::fill(q_dot_plan_.begin(), q_dot_plan_.end(), 0);
+
+                init_time_ = ros::Time::now().toSec();
 
                 is_init_ = true;
-
-                generateRandTraj();
             }
 
-            if (is_init_)
+            if (is_init_ && init_traj_prepared_)
             {
                 m_dc_.lock();
                 sim_time_ = dc_.sim_time_;
@@ -234,24 +247,80 @@ void PandaController::updateKinematicsDynamics()
 
 void PandaController::computeControlInput()
 {
-    std::vector<Eigen::Vector3d> cmd;
-    cmd.resize(dc_.num_dof_);
+    cur_time_= ros::Time::now().toSec() - init_time_;
+    if (cur_time_ >= traj_init_time_ + traj_duration_)
+    {   
+        random_plan_ = random_plan_next_;
+        cur_waypoint_ = 0;
+        traj_init_time_ = cur_time_;//ros::Time::now().toSec();
+        total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
+        traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
 
-    double cur_time = ros::Time::now().toSec();
-    for (int i = 0; i < dc_.num_dof_; i++)
-    {
-        cmd[i] = quintic_spline(cur_time, traj_init_time_, traj_init_time_+20.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0);
-        q_desired_[i] = cmd[i](0);
-        qdot_desired_[i] = cmd[i](1);
-        qddot_desired_[i] = cmd[i](2);
+        next_traj_prepared_ = false; 
+        std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
+        std::cout<<"New Trajectory!"<< std::endl;
+        std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
+        std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
+        std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
+        std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
     }
-    control_input_ = A_*(qddot_desired_ + kv*(qdot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
 
+    if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
+    {
+        if (cur_waypoint_ < total_waypoints_-2)
+            cur_waypoint_++;
+    }
+    
+    double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
+    double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
+
+    std::vector<Eigen::Vector3d> traj;
+    traj.resize(dc_.num_dof_);
+
+    for (int i = 0; i < dc_.num_dof_-2; i++)
+    {
+        double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
+        double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
+        double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
+        double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
+        double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
+        double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
+
+        traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
+
+        q_desired_(i) = traj[i](0);
+        q_dot_desired_(i) = traj[i](1);
+        q_ddot_desired_(i) = traj[i](2);
+    }
+    q_desired_(7) = 0.0;
+    q_desired_(8) = 0.0;
+    q_dot_desired_(7) = 0.0;
+    q_dot_desired_(8) = 0.0;
+    q_ddot_desired_(7) = 0.0;
+    q_ddot_desired_(8) = 0.0;
+
+    control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
+    // control_input_ = q_desired_;
+    
     m_ci_.lock();
     dc_.control_input_ = control_input_;
     m_ci_.unlock();
+    
+    if (int(cur_time_*1000)%10==0)
+    {
+        writeFile << cur_time_ << "\t";
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_desired_(i) << "\t";
+            writeFile << q_(i) << "\t";
+            writeFile << q_dot_desired_(i) << "\t";
+            writeFile << q_dot_(i) << "\t";
+            writeFile << q_ddot_desired_(i) << "\t";
+            writeFile << control_input_(i) << "\t";
+        }
+        writeFile << "\n";
+    }
 }
-
 
 Eigen::Vector3d PandaController::quintic_spline(
     double time,       // Current time
