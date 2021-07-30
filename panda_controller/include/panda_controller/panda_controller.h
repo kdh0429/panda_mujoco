@@ -36,6 +36,7 @@ class PandaController{
 
     private:
         double cur_time_;
+        double pre_time_;
         double init_time_;
 
         std::mutex m_dc_;

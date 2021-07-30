@@ -16,7 +16,6 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     ros::AsyncSpinner spinner(1);
     spinner.start();
     initMoveit();
-    // generateRandTraj();
     writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
 }
 
@@ -119,7 +118,7 @@ void PandaController::generateRandTraj()
     {
         moveit::core::RobotState start_state = *(move_group_.getCurrentState());
 
-        for (int i = 0; i < dc_.num_dof_-2; i++)
+        for (int i = 0; i < dc_.num_dof_; i++)
         {
             q_init_plan_[i] = q_target_plan_[i];
             q_dot_plan_[i] = 0.0;
@@ -131,19 +130,19 @@ void PandaController::generateRandTraj()
         
         std::random_device rand_device;
         std::default_random_engine rand_seed;
-        std::uniform_real_distribution<double> angles[dc_.num_dof_-2];
+        std::uniform_real_distribution<double> angles[dc_.num_dof_];
         rand_seed.seed(rand_device());
 
         do
         {
             double safe_range = 0.0;
-            for (size_t i = 0; i < dc_.num_dof_-2; i++)
+            for (size_t i = 0; i < dc_.num_dof_; i++)
             {
                 safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
                 angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
             }
 
-            for (int i = 0; i < dc_.num_dof_-2; i++) 
+            for (int i = 0; i < dc_.num_dof_; i++) 
                 q_target_plan_[i] = ((angles[i])(rand_seed));
 
             move_group_.setJointValueTarget(q_target_plan_);
@@ -204,14 +203,14 @@ void PandaController::compute()
                 A_.setZero();
 
                 // For Moveit
-                q_limit_l_.resize(dc_.num_dof_-2);
-                q_limit_u_.resize(dc_.num_dof_-2);
+                q_limit_l_.resize(dc_.num_dof_);
+                q_limit_u_.resize(dc_.num_dof_);
                 q_limit_l_ << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0873, -2.8973;
                 q_limit_u_ <<  2.8973,  1.7628,  2.8973,  0.0698,  2.8973,  2.1127,  2.8973;
 
-                q_target_plan_.resize(dc_.num_dof_-2);
-                q_init_plan_.resize(dc_.num_dof_-2);
-                q_dot_plan_.resize(dc_.num_dof_-2);
+                q_target_plan_.resize(dc_.num_dof_);
+                q_init_plan_.resize(dc_.num_dof_);
+                q_dot_plan_.resize(dc_.num_dof_);
                 std::fill(q_target_plan_.begin(), q_target_plan_.end(), 0);
                 std::fill(q_init_plan_.begin(), q_init_plan_.end(), 0);
                 std::fill(q_dot_plan_.begin(), q_dot_plan_.end(), 0);
@@ -277,7 +276,7 @@ void PandaController::computeControlInput()
     std::vector<Eigen::Vector3d> traj;
     traj.resize(dc_.num_dof_);
 
-    for (int i = 0; i < dc_.num_dof_-2; i++)
+    for (int i = 0; i < dc_.num_dof_; i++)
     {
         double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
         double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
@@ -292,12 +291,6 @@ void PandaController::computeControlInput()
         q_dot_desired_(i) = traj[i](1);
         q_ddot_desired_(i) = traj[i](2);
     }
-    q_desired_(7) = 0.0;
-    q_desired_(8) = 0.0;
-    q_dot_desired_(7) = 0.0;
-    q_dot_desired_(8) = 0.0;
-    q_ddot_desired_(7) = 0.0;
-    q_ddot_desired_(8) = 0.0;
 
     control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
     // control_input_ = q_desired_;
@@ -306,20 +299,38 @@ void PandaController::computeControlInput()
     dc_.control_input_ = control_input_;
     m_ci_.unlock();
     
-    if (int(cur_time_*1000)%10==0)
+    if (int(cur_time_*100) != int(pre_time_*100))
     {
         writeFile << cur_time_ << "\t";
         for (int i = 0; i < dc_.num_dof_; i++)
         {
-            writeFile << q_desired_(i) << "\t";
             writeFile << q_(i) << "\t";
-            writeFile << q_dot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
             writeFile << q_dot_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_dot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
             writeFile << q_ddot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
             writeFile << control_input_(i) << "\t";
         }
+
         writeFile << "\n";
     }
+
+    pre_time_ = cur_time_;
 }
 
 Eigen::Vector3d PandaController::quintic_spline(

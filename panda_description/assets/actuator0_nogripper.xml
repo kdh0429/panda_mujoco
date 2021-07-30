@@ -28,8 +28,5 @@
      <motor name="panda0_joint6" joint="panda0_joint6" ctrllimited="true" ctrlrange="-300 300"/>
      <motor name="panda0_joint7" joint="panda0_joint7" ctrllimited="true" ctrlrange="-300 300"/>
 
-     <motor name="panda0_finger_joint1" joint="panda0_finger_joint1" ctrllimited="true" ctrlrange="-300 300"/>
-     <motor name="panda0_finger_joint2" joint="panda0_finger_joint2" ctrllimited="true" ctrlrange="-300 300"/>
-
     </actuator>
 </mujocoinclude>
