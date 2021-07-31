@@ -283,7 +283,7 @@ void state_publisher()
             {
                 joint_state_msg_.position[i] = d->qpos[i];
                 joint_state_msg_.velocity[i] = d->qvel[i];
-                joint_state_msg_.effort[i] = d->qacc[i];
+                joint_state_msg_.effort[i] = d->qfrc_unc[i];
             }
         }
 

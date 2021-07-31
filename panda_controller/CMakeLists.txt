@@ -4,6 +4,7 @@ project(panda_controller)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
+set(Torch_DIR "/home/kim/libtorch/share/cmake/Torch/")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -17,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   moveit_visual_tools
 )
+find_package(Torch REQUIRED)
 
 
 catkin_package()
@@ -41,6 +43,7 @@ target_link_libraries(panda_controller_lib
 target_link_libraries(panda_controller
   panda_controller_lib
   ${catkin_LIBRARIES}
+  ${TORCH_LIBRARIES}
   )
 
 add_dependencies(panda_controller_lib ${catkin_EXPORTED_TARGETS})

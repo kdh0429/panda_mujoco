@@ -17,6 +17,7 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     spinner.start();
     initMoveit();
     writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
+    writeFile << std::fixed << std::setprecision(8);
 }
 
 PandaController::~PandaController()
@@ -293,7 +294,7 @@ void PandaController::computeControlInput()
     }
 
     control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
-    // control_input_ = q_desired_;
+    // control_input_ = non_linear_;
     
     m_ci_.lock();
     dc_.control_input_ = control_input_;
