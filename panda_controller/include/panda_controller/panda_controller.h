@@ -21,6 +21,8 @@
 #include <moveit_msgs/CollisionObject.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 
+#include <torch/script.h> 
+
 class PandaController{
     public:
         PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode);
@@ -28,10 +30,12 @@ class PandaController{
         void compute();
         void updateKinematicsDynamics();
         void computeControlInput();
+        void logData();
         void initMoveit();
         void setMoveitObstables();
         void generateRandTrajThread();
         void generateRandTraj();
+        void computeTrainedModel();
         Eigen::Vector3d quintic_spline(double time, double time_0, double time_f, double x_0, double x_dot_0, double x_ddot_0, double x_f, double x_dot_f, double x_ddot_f);
 
     private:
@@ -89,4 +93,25 @@ class PandaController{
         bool next_traj_prepared_ = false;
 
         std::ofstream writeFile;
+
+        // Torch
+        torch::jit::script::Module trained_model_;
+
+        static const int num_seq = 20;
+        static const int num_features = 2;
+        static const int num_joint = 7;
+
+        float ring_buffer_[num_seq*num_features*num_joint];
+        int ring_buffer_idx_ = 0;
+
+        float max_theta_ = 3.14;
+        float min_theta_ = -3.14;
+        float max_theta_dot_ = 0.3;
+        float min_theta_dot_ = -0.3;
+
+        torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false).device(torch::kCPU);
+        torch::Tensor input_tensor_ = torch::zeros({1, num_seq, num_features*num_joint}, options);
+
+        double cur_time_inference_;
+        double pre_time_inference_;
 };

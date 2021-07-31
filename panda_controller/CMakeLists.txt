@@ -5,10 +5,12 @@ project(panda_controller)
 # add_compile_options(-std=c++11)
 
 set(Torch_DIR "/home/kim/libtorch/share/cmake/Torch/")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
@@ -37,13 +39,13 @@ target_link_libraries(panda_controller_lib
   ${catkin_LIBRARIES}
   -lrbdl
   -lrbdl_urdfreader
+  ${TORCH_LIBRARIES}
 )
 
 
 target_link_libraries(panda_controller
   panda_controller_lib
   ${catkin_LIBRARIES}
-  ${TORCH_LIBRARIES}
   )
 
 add_dependencies(panda_controller_lib ${catkin_EXPORTED_TARGETS})

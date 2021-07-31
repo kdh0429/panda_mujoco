@@ -16,8 +16,16 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     ros::AsyncSpinner spinner(1);
     spinner.start();
     initMoveit();
+
     writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
     writeFile << std::fixed << std::setprecision(8);
+
+    try {
+        trained_model_ = torch::jit::load("/home/kim/ssd2/PandaResidual/model/traced_model.pt");
+    }
+    catch (const c10::Error& e) {
+        std::cerr << "Error loading the model\n";
+    }
 }
 
 PandaController::~PandaController()
@@ -28,6 +36,7 @@ PandaController::~PandaController()
 void PandaController::initMoveit()
 {
     const robot_state::JointModelGroup* joint_model_group = move_group_.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
+    move_group_.setMaxVelocityScalingFactor(5.0);
 
     namespace rvt = rviz_visual_tools;
     moveit_visual_tools::MoveItVisualTools visual_tools("panda_link0");
@@ -232,6 +241,7 @@ void PandaController::compute()
 
                 updateKinematicsDynamics();
                 computeControlInput();
+                computeTrainedModel();
             }
         }
         ros::spinOnce();
@@ -299,7 +309,13 @@ void PandaController::computeControlInput()
     m_ci_.lock();
     dc_.control_input_ = control_input_;
     m_ci_.unlock();
-    
+
+    logData();
+    pre_time_ = cur_time_;
+}
+
+void PandaController::logData()
+{
     if (int(cur_time_*100) != int(pre_time_*100))
     {
         writeFile << cur_time_ << "\t";
@@ -330,8 +346,44 @@ void PandaController::computeControlInput()
 
         writeFile << "\n";
     }
+}
 
-    pre_time_ = cur_time_;
+void PandaController::computeTrainedModel()
+{
+    cur_time_inference_ = ros::Time::now().toSec() - init_time_;
+    if (int(cur_time_inference_*100) != int(pre_time_inference_*100))
+    {
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            ring_buffer_[ring_buffer_idx_*num_features*num_joint + num_features*i] = 2*(q_(i)-min_theta_)/(max_theta_-min_theta_) - 1;
+            ring_buffer_[ring_buffer_idx_*num_features*num_joint + num_features*i + 1] = 2*(q_dot_(i)-min_theta_dot_)/(max_theta_dot_-min_theta_dot_) - 1;
+        }
+        ring_buffer_idx_++;
+        if (ring_buffer_idx_ == num_seq)
+            ring_buffer_idx_ = 0;
+    }
+
+    for (int seq = 0; seq < num_seq; seq++)
+        for (int input_feat = 0; input_feat < num_features*num_joint; input_feat++)
+        {
+            int process_data_idx = ring_buffer_idx_+1+seq;
+            if (process_data_idx >= num_seq)
+                process_data_idx -= num_seq;
+            input_tensor_[0][seq][input_feat] = ring_buffer_[process_data_idx*num_features*num_joint + input_feat];
+        }
+    
+    // Create a vector of inputs.
+    std::vector<torch::jit::IValue> inputs;
+    inputs.push_back(input_tensor_);
+
+    // Execute the model and turn its output into a tensor.
+    at::Tensor output = trained_model_.forward(inputs).toTensor();
+    // double* temp_arr = output.data_ptr<double>();
+    // std::cout << output.slice(/*dim=*/1, /*start=*/0, /*end=*/5) << '\n';
+    std::cout <<"Inferenced: " << output.data()[0]*100 << std::endl;
+    std::cout <<"Command: " << control_input_ << std::endl;
+
+    pre_time_inference_ = cur_time_inference_;
 }
 
 Eigen::Vector3d PandaController::quintic_spline(
