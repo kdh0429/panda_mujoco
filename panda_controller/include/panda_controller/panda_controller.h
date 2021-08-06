@@ -2,6 +2,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <random>
+#include <math.h>
 
 #include <ros/ros.h>
 #include <ros/console.h>
@@ -51,6 +52,9 @@ class PandaController{
 
         double sim_time_ = 0.0;
 
+        bool is_write_ = false;
+        std::ofstream writeFile;
+
         // Robot State
         Eigen::VectorXd q_;
         Eigen::VectorXd q_dot_;
@@ -61,7 +65,7 @@ class PandaController{
         Eigen::VectorXd q_dot_desired_;
         Eigen::VectorXd q_desired_;
 
-        double kv, kp;
+        Eigen::MatrixXd kv, kp;
 
         Eigen::VectorXd control_input_;
 
@@ -92,8 +96,6 @@ class PandaController{
         bool init_traj_prepared_ = false;
         bool next_traj_prepared_ = false;
 
-        std::ofstream writeFile;
-
         // Torch
         torch::jit::script::Module trained_model_;
 
@@ -111,6 +113,8 @@ class PandaController{
 
         torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false).device(torch::kCPU);
         torch::Tensor input_tensor_ = torch::zeros({1, num_seq, num_features*num_joint}, options);
+        Eigen::VectorXd estimated_ext_;
+        double measured_ext_[num_joint];
 
         double cur_time_inference_;
         double pre_time_inference_;

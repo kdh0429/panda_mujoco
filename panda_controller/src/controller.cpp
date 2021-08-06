@@ -17,8 +17,11 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     spinner.start();
     initMoveit();
 
-    writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
-    writeFile << std::fixed << std::setprecision(8);
+    if (is_write_)
+    {
+        writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
+        writeFile << std::fixed << std::setprecision(8);
+    }
 
     try {
         trained_model_ = torch::jit::load("/home/kim/ssd2/PandaResidual/model/traced_model.pt");
@@ -201,8 +204,15 @@ void PandaController::compute()
                 q_desired_.resize(dc_.num_dof_);
                 q_desired_.setZero();
 
-                kp = 2500;
-                kv = 100;
+                kp.resize(dc_.num_dof_, dc_.num_dof_);
+                kp.setZero();
+                kv.resize(dc_.num_dof_, dc_.num_dof_);
+                kv.setZero();
+                for (int i = 0; i < dc_.num_dof_; i++)
+                {
+                    kp(i,i) = 2500;
+                    kv(i,i) = 100;
+                }
 
                 control_input_.resize(dc_.num_dof_);
                 control_input_.setZero();
@@ -224,6 +234,10 @@ void PandaController::compute()
                 std::fill(q_target_plan_.begin(), q_target_plan_.end(), 0);
                 std::fill(q_init_plan_.begin(), q_init_plan_.end(), 0);
                 std::fill(q_dot_plan_.begin(), q_dot_plan_.end(), 0);
+
+                // Torch
+                estimated_ext_.resize(dc_.num_dof_);
+                estimated_ext_.setZero();
 
                 init_time_ = ros::Time::now().toSec();
 
@@ -303,14 +317,37 @@ void PandaController::computeControlInput()
         q_ddot_desired_(i) = traj[i](2);
     }
 
+    for(int i = 0; i < dc_.num_dof_; i++)
+    {
+        q_desired_(i) = 0.0;
+        q_dot_desired_(i) = 0.0;
+        q_ddot_desired_(i) = 0.0;
+
+        // if (estimated_ext_(i) > 10.0)
+        // {
+        //     kp(i,i) = (900-2500) / (110.0-10.0) *(estimated_ext_(i) - 10.0) + 2500;
+        //     if (kp(i,i) < 900.0)
+        //         kp(i,i) = 900.0;
+        //     kv(i,i) = sqrt(kp(i,i))*2.0;
+        // }
+        // else
+        // {
+        //     kp(i,i) = 2500;
+        //     kv(i,i) = 100;
+        // }
+    }
+
     control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
-    // control_input_ = non_linear_;
     
     m_ci_.lock();
     dc_.control_input_ = control_input_;
     m_ci_.unlock();
 
-    logData();
+    if (is_write_)
+    {
+        logData();
+    }
+
     pre_time_ = cur_time_;
 }
 
@@ -319,31 +356,39 @@ void PandaController::logData()
     if (int(cur_time_*100) != int(pre_time_*100))
     {
         writeFile << cur_time_ << "\t";
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_dot_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_dot_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_ddot_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << control_input_(i) << "\t";
-        }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_dot_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_dot_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_ddot_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << control_input_(i) << "\t";
+        // }
 
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << estimated_ext_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << measured_ext_[i] << "\t";
+        }
         writeFile << "\n";
     }
 }
@@ -361,27 +406,48 @@ void PandaController::computeTrainedModel()
         ring_buffer_idx_++;
         if (ring_buffer_idx_ == num_seq)
             ring_buffer_idx_ = 0;
-    }
 
-    for (int seq = 0; seq < num_seq; seq++)
-        for (int input_feat = 0; input_feat < num_features*num_joint; input_feat++)
+            
+        for (int seq = 0; seq < num_seq; seq++)
         {
-            int process_data_idx = ring_buffer_idx_+1+seq;
-            if (process_data_idx >= num_seq)
-                process_data_idx -= num_seq;
-            input_tensor_[0][seq][input_feat] = ring_buffer_[process_data_idx*num_features*num_joint + input_feat];
+            for (int input_feat = 0; input_feat < num_features*num_joint; input_feat++)
+            {
+                int process_data_idx = ring_buffer_idx_+seq;
+                if (process_data_idx >= num_seq)
+                    process_data_idx -= num_seq;
+                input_tensor_[0][seq][input_feat] = ring_buffer_[process_data_idx*num_features*num_joint + input_feat];
+            }
         }
-    
-    // Create a vector of inputs.
-    std::vector<torch::jit::IValue> inputs;
-    inputs.push_back(input_tensor_);
+        
+        // Create a vector of inputs.
+        std::vector<torch::jit::IValue> inputs;
+        inputs.push_back(input_tensor_);
 
-    // Execute the model and turn its output into a tensor.
-    at::Tensor output = trained_model_.forward(inputs).toTensor();
-    // double* temp_arr = output.data_ptr<double>();
-    // std::cout << output.slice(/*dim=*/1, /*start=*/0, /*end=*/5) << '\n';
-    std::cout <<"Inferenced: " << output.data()[0]*100 << std::endl;
-    std::cout <<"Command: " << control_input_ << std::endl;
+        // Execute the model and turn its output into a tensor.
+        at::Tensor output = trained_model_.forward(inputs).toTensor();
+        // double* temp_arr = output.data_ptr<double>();
+
+        Eigen::VectorXd ext;
+        ext.resize(7);
+        ext.setZero();
+        ext = (A_*dc_.effort_ + non_linear_) - control_input_;
+
+        for (int i= 0; i < dc_.num_dof_; i++)
+        {
+            estimated_ext_(i) =  output.data()[0][i].item<double>()*100 - control_input_[i];
+            if (i < 4)
+            {
+                measured_ext_[i] = ext(i) + dc_.q_dot_(i) * 100.0;
+            }
+            else
+            {
+                measured_ext_[i] = ext(i) + dc_.q_dot_(i) * 10.0;
+            }
+        }
+        std::cout << "Estimated: " << estimated_ext_(0) << std::endl;
+        std::cout << "Measured: " << measured_ext_[0] << std::endl;
+
+    }
 
     pre_time_inference_ = cur_time_inference_;
 }

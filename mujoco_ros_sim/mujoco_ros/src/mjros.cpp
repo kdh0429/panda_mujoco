@@ -283,9 +283,11 @@ void state_publisher()
             {
                 joint_state_msg_.position[i] = d->qpos[i];
                 joint_state_msg_.velocity[i] = d->qvel[i];
-                joint_state_msg_.effort[i] = d->qfrc_unc[i];
+                // joint_state_msg_.effort[i] = d->qfrc_inverse[i]-d->qfrc_applied[i]-d->qfrc_actuator[i];
+                joint_state_msg_.effort[i] = d->qacc[i];
             }
         }
+        // std::cout << "External: " << joint_state_msg_.effort[0] << std::endl;
 
         for (int i = 0; i < m->nsensor; i++)
         {
@@ -315,7 +317,7 @@ void state_publisher()
             sensor_state_pub.publish(sensor_state_msg_);
             joint_state_pub.publish(joint_state_msg_);
             sim_time_pub.publish(sim_time);
-        }
+        }   
     }
     else
     {
