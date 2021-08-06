@@ -1,34 +1,40 @@
 #include "panda_controller/panda_controller.h"
+#include "panda_controller/util.h"
 
 PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc), move_group_(PLANNING_GROUP)
 {
-    // ros::console::shutdown();
-
     if (control_mode == 0)
         dc_.sim_mode_ = "position";
     else if (control_mode == 1)
         dc_.sim_mode_ = "torque";
 
+    // RBDL
     std::string urdf_name = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
     std::cout<<"Model name: " << urdf_name <<std::endl;
     RigidBodyDynamics::Addons::URDFReadFromFile(urdf_name.c_str(), &robot_, false, false);
 
+    // Moveit
     ros::AsyncSpinner spinner(1);
     spinner.start();
     initMoveit();
-
+    
+    // Logging
     if (is_write_)
     {
         writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
         writeFile << std::fixed << std::setprecision(8);
     }
 
+    // Torch
     try {
         trained_model_ = torch::jit::load("/home/kim/ssd2/PandaResidual/model/traced_model.pt");
     }
     catch (const c10::Error& e) {
         std::cerr << "Error loading the model\n";
     }
+
+    // Keyboard
+    init_keyboard();
 }
 
 PandaController::~PandaController()
@@ -257,10 +263,32 @@ void PandaController::compute()
                 computeControlInput();
                 computeTrainedModel();
             }
-        }
+
+            if (_kbhit()) {
+                int ch = _getch();
+                _putch(ch);
+                mode_ = ch;
+                std::cout << "Mode Changed to: ";   // i: 105, r: 114, m: 109, s: 115, f:102, h: 104
+                switch(mode_)
+                {
+                    case(104):
+                        std::cout << "Home Pose" << std::endl;
+                        break;
+                    case(105):
+                        std::cout<< "Init Pose" << std::endl;
+                        break;
+                    case(114):
+                        std::cout<< "Random Trajectory" << std::endl;
+                        break;
+                    case(102):
+                        std::cout << "Force Control" << std::endl;
+                }
+            }
         ros::spinOnce();
         r.sleep();
+        }
     }
+    close_keyboard();
 }
 
 void PandaController::updateKinematicsDynamics()
@@ -322,19 +350,6 @@ void PandaController::computeControlInput()
         q_desired_(i) = 0.0;
         q_dot_desired_(i) = 0.0;
         q_ddot_desired_(i) = 0.0;
-
-        // if (estimated_ext_(i) > 10.0)
-        // {
-        //     kp(i,i) = (900-2500) / (110.0-10.0) *(estimated_ext_(i) - 10.0) + 2500;
-        //     if (kp(i,i) < 900.0)
-        //         kp(i,i) = 900.0;
-        //     kv(i,i) = sqrt(kp(i,i))*2.0;
-        // }
-        // else
-        // {
-        //     kp(i,i) = 2500;
-        //     kv(i,i) = 100;
-        // }
     }
 
     control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
@@ -444,8 +459,8 @@ void PandaController::computeTrainedModel()
                 measured_ext_[i] = ext(i) + dc_.q_dot_(i) * 10.0;
             }
         }
-        std::cout << "Estimated: " << estimated_ext_(0) << std::endl;
-        std::cout << "Measured: " << measured_ext_[0] << std::endl;
+        // std::cout << "Estimated: " << estimated_ext_(0) << std::endl;
+        // std::cout << "Measured: " << measured_ext_[0] << std::endl;
 
     }
 

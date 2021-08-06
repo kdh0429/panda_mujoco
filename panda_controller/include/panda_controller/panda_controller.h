@@ -24,6 +24,11 @@
 
 #include <torch/script.h> 
 
+# define MODE_INIT = 105;
+# define MODE_HOME = 104;
+# define MODE_RANDOM = 114;
+# define MODE_FORCE = 102;
+
 class PandaController{
     public:
         PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode);
@@ -43,6 +48,8 @@ class PandaController{
         double cur_time_;
         double pre_time_;
         double init_time_;
+
+        int mode_ = 0;
 
         std::mutex m_dc_;
         std::mutex m_ci_;
