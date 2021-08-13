@@ -187,7 +187,7 @@ void PandaController::generateRandTrajThread()
 
 void PandaController::compute()
 {
-    ros::Rate r(2000);
+    ros::Rate r(hz_);
     while(ros::ok())
     {
         if (!dc_.is_first_callback)
@@ -202,6 +202,23 @@ void PandaController::compute()
                 effort_.resize(dc_.num_dof_);
                 effort_.setZero();
 
+                q_mode_init_.resize(dc_.num_dof_);
+                q_mode_init_.setZero();
+                q_dot_mode_init_.resize(dc_.num_dof_);
+                q_dot_mode_init_.setZero();
+
+                j_temp_.resize(6, dc_.num_dof_);
+                j_temp_.setZero();
+                j_.resize(6, dc_.num_dof_);
+                j_.setZero();
+
+                x_.linear().setZero();
+                x_.translation().setZero();
+                x_dot_.resize(6);
+                x_dot_.setZero();
+                x_dot_desired_.resize(6);
+                x_dot_desired_.setZero();
+            
                 // Control
                 q_ddot_desired_.resize(dc_.num_dof_);
                 q_ddot_desired_.setZero();
@@ -214,10 +231,20 @@ void PandaController::compute()
                 kp.setZero();
                 kv.resize(dc_.num_dof_, dc_.num_dof_);
                 kv.setZero();
+                kp_task_.resize(6,6);
+                kp_task_.setZero();
+                kv_task_.resize(6,6);
+                kv_task_.setZero();
+
                 for (int i = 0; i < dc_.num_dof_; i++)
                 {
                     kp(i,i) = 2500;
                     kv(i,i) = 100;
+                }
+                for (int i = 0; i < 6; i++)
+                {
+                    kp_task_(i,i) = 4900;
+                    kv_task_(i,i) = 140;
                 }
 
                 control_input_.resize(dc_.num_dof_);
@@ -227,6 +254,8 @@ void PandaController::compute()
                 non_linear_.setZero();
                 A_.resize(dc_.num_dof_, dc_.num_dof_);
                 A_.setZero();
+                Lambda_.resize(6,6);
+                Lambda_.setZero();
 
                 // For Moveit
                 q_limit_l_.resize(dc_.num_dof_);
@@ -242,8 +271,20 @@ void PandaController::compute()
                 std::fill(q_dot_plan_.begin(), q_dot_plan_.end(), 0);
 
                 // Torch
-                estimated_ext_.resize(dc_.num_dof_);
-                estimated_ext_.setZero();
+                std::fill(ring_buffer_, ring_buffer_+num_seq*num_features*num_joint, 0);
+                estimated_ext_torque_.resize(dc_.num_dof_);
+                estimated_ext_torque_.setZero();
+                estimated_ext_torque_filtered_.resize(dc_.num_dof_);
+                estimated_ext_torque_filtered_.setZero();
+                measured_ext_torque_.resize(dc_.num_dof_);
+                measured_ext_torque_.setZero();
+
+                estimated_ext_force_.resize(6);
+                estimated_ext_force_.setZero();
+                estimated_ext_force_init_.resize(6);
+                estimated_ext_force_init_.setZero();
+                measured_ext_force_.resize(6);
+                measured_ext_force_.setZero();
 
                 init_time_ = ros::Time::now().toSec();
 
@@ -260,7 +301,7 @@ void PandaController::compute()
                 m_dc_.unlock();
 
                 updateKinematicsDynamics();
-                computeControlInput();
+                computeControlInput();  
                 computeTrainedModel();
             }
 
@@ -268,6 +309,14 @@ void PandaController::compute()
                 int ch = _getch();
                 _putch(ch);
                 mode_ = ch;
+
+                mode_init_time_ = ros::Time::now().toSec() - init_time_;
+                q_mode_init_ = q_;
+                q_dot_mode_init_ = q_dot_;
+                x_mode_init_ = x_;
+
+                estimated_ext_force_init_ = estimated_ext_force_;
+
                 std::cout << "Mode Changed to: ";   // i: 105, r: 114, m: 109, s: 115, f:102, h: 104
                 switch(mode_)
                 {
@@ -282,6 +331,7 @@ void PandaController::compute()
                         break;
                     case(102):
                         std::cout << "Force Control" << std::endl;
+                        break;
                 }
             }
         ros::spinOnce();
@@ -293,66 +343,186 @@ void PandaController::compute()
 
 void PandaController::updateKinematicsDynamics()
 {
+    static const int BODY_ID = robot_.GetBodyId("panda_link8");
+
+    x_.translation().setZero();
+    x_.linear().setZero();
+    x_.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), true);
+    x_.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(robot_, q_, BODY_ID, true).transpose();
+
+    j_temp_.setZero();
+    RigidBodyDynamics::CalcPointJacobian6D(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), j_temp_, true);
+    j_.setZero();
+    for (int i = 0; i<2; i++)
+	{
+		j_.block<3, 7>(i * 3, 0) = j_temp_.block<3, 7>(3 - i * 3, 0);
+	}    
+
+    x_dot_ = j_ * q_dot_;
+
+    non_linear_.setZero();
     RigidBodyDynamics::NonlinearEffects(robot_, q_, q_dot_, non_linear_);
+
+    A_.setZero();
     RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_, A_, true);
+    Lambda_ = (j_ * A_.inverse() * j_.transpose()).inverse();
 }
 
 void PandaController::computeControlInput()
 {
     cur_time_= ros::Time::now().toSec() - init_time_;
-    if (cur_time_ >= traj_init_time_ + traj_duration_)
-    {   
-        random_plan_ = random_plan_next_;
-        cur_waypoint_ = 0;
-        traj_init_time_ = cur_time_;//ros::Time::now().toSec();
-        total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
-        traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
 
-        next_traj_prepared_ = false; 
-        std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
-        std::cout<<"New Trajectory!"<< std::endl;
-        std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
-        std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
-        std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
-        std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
-    }
-
-    if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
+    if(mode_ == MODE_RANDOM)
     {
-        if (cur_waypoint_ < total_waypoints_-2)
-            cur_waypoint_++;
+        if (cur_time_ >= traj_init_time_ + traj_duration_)
+        {   
+            random_plan_ = random_plan_next_;
+            cur_waypoint_ = 0;
+            traj_init_time_ = cur_time_;//ros::Time::now().toSec();
+            total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
+            traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
+
+            next_traj_prepared_ = false; 
+            std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
+            std::cout<<"New Trajectory!"<< std::endl;
+            std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
+            std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
+            std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
+            std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
+        }
+
+        if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
+        {
+            if (cur_waypoint_ < total_waypoints_-2)
+                cur_waypoint_++;
+        }
+        
+        double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
+        double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
+
+        std::vector<Eigen::Vector3d> traj;
+        traj.resize(dc_.num_dof_);
+
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
+            double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
+            double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
+            double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
+            double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
+            double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
+
+            traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
+
+            q_desired_(i) = traj[i](0);
+            q_dot_desired_(i) = traj[i](1);
+            q_ddot_desired_(i) = traj[i](2);
+        }
+
+        control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
     }
-    
-    double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
-    double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
 
-    std::vector<Eigen::Vector3d> traj;
-    traj.resize(dc_.num_dof_);
-
-    for (int i = 0; i < dc_.num_dof_; i++)
+    else if (mode_ == MODE_HOME)
     {
-        double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
-        double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
-        double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
-        double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
-        double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
-        double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
+        Eigen::VectorXd q_target;
+        q_target.resize(dc_.num_dof_);
+        q_target << 0.0, -3.14/6, 0.0, -3.14/6, 0.0, 0.0, 0.0;
 
-        traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
+        for(int i = 0; i < dc_.num_dof_; i++)
+        {
+            Eigen::Vector3d traj_desired;
+            traj_desired = quintic_spline(cur_time_, mode_init_time_, mode_init_time_+5.0, q_mode_init_(i), q_dot_mode_init_(i), 0.0, q_target(i), 0.0, 0.0);
+            q_desired_(i) = traj_desired(0);
+            q_dot_desired_(i) = traj_desired(1);
+            q_ddot_desired_(i) = traj_desired(2);
+        }
 
-        q_desired_(i) = traj[i](0);
-        q_dot_desired_(i) = traj[i](1);
-        q_ddot_desired_(i) = traj[i](2);
+        control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
     }
 
-    for(int i = 0; i < dc_.num_dof_; i++)
+    else if (mode_ == MODE_INIT)
     {
-        q_desired_(i) = 0.0;
-        q_dot_desired_(i) = 0.0;
-        q_ddot_desired_(i) = 0.0;
+        x_target_.translation() << 0.3, 0.0, 0.8;
+        x_target_.linear() << 0.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0;
+
+        double traj_duration = 5.0;
+
+        for (int i = 0; i < 3; i++)
+        {
+            x_desired_.translation()(i) = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.translation()(i), x_target_.translation()(i), 0.0, 0.0);
+            x_dot_desired_(i) = cubicDot(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.translation()(i), x_target_.translation()(i), 0.0, 0.0);
+        }
+        
+        x_desired_.linear() = rotationCubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.linear(), x_target_.linear()); 
+        x_dot_desired_.segment(3,3) = rotationCubicDot(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.linear(), x_target_.linear()); 
+
+        Eigen::VectorXd x_error;
+        x_error.resize(6);
+        x_error.setZero();
+        Eigen::VectorXd x_dot_error;
+        x_dot_error.resize(6);
+        x_dot_error.setZero();
+
+        x_error.segment(0,3) = x_desired_.translation() - x_.translation();
+        x_error.segment(3,3) = -getPhi(x_.linear(), x_desired_.linear());
+        x_dot_error.segment(0,3)= x_dot_desired_.segment(0,3) - x_dot_.segment(0,3);
+        x_dot_error.segment(3,3)= x_dot_desired_.segment(3,3) - x_dot_.segment(3,3);
+
+        control_input_ = j_.transpose()*Lambda_*(kp_task_*x_error +kv_task_*x_dot_error) + non_linear_;
     }
 
-    control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
+    else if (mode_ == MODE_FORCE)
+    {
+        double traj_duration = 5.0;
+
+        Eigen::VectorXd f_star;
+        f_star.resize(6);
+
+        // Position control y, z
+        x_target_.translation() << 0.3, 0.0, 0.8;
+        x_target_.linear() << 0.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0;
+
+        for (int i = 0; i < 3; i++)
+        {
+            x_desired_.translation()(i) = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.translation()(i), x_target_.translation()(i), 0.0, 0.0);
+            x_dot_desired_(i) = cubicDot(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.translation()(i), x_target_.translation()(i), 0.0, 0.0);
+        }
+        
+        x_desired_.linear() = rotationCubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.linear(), x_target_.linear()); 
+        x_dot_desired_.segment(3,3) = rotationCubicDot(cur_time_, mode_init_time_, mode_init_time_+traj_duration, x_mode_init_.linear(), x_target_.linear()); 
+
+        Eigen::VectorXd x_error;
+        x_error.resize(6);
+        x_error.setZero();
+        Eigen::VectorXd x_dot_error;
+        x_dot_error.resize(6);
+        x_dot_error.setZero();
+
+        x_error.segment(0,3) = x_desired_.translation() - x_.translation();
+        x_error.segment(3,3) = -getPhi(x_.linear(), x_desired_.linear());
+        x_dot_error.segment(0,3)= x_dot_desired_.segment(0,3) - x_dot_.segment(0,3);
+        x_dot_error.segment(3,3)= x_dot_desired_.segment(3,3) - x_dot_.segment(3,3);
+
+        f_star = kp_task_*x_error +kv_task_*x_dot_error;
+
+        // Force control x
+        double f_d_x = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, estimated_ext_force_init_(0), 100.0, 0.0, 0.0);
+        double k_p_force = 0.1;
+        double k_v_force = 0.0001;
+        f_star(0) = k_p_force*(f_d_x - estimated_ext_force_(0)) - k_v_force*x_dot_(0);
+
+        Eigen::VectorXd F_d;
+        F_d.resize(6);
+        F_d.setZero();
+        F_d(0) = estimated_ext_force_(0);
+
+        control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
+    }
+
+    else
+    {
+        control_input_ = non_linear_;
+    }
     
     m_ci_.lock();
     dc_.control_input_ = control_input_;
@@ -398,11 +568,11 @@ void PandaController::logData()
 
         for (int i = 0; i < dc_.num_dof_; i++)
         {
-            writeFile << estimated_ext_(i) << "\t";
+            writeFile << estimated_ext_torque_(i) << "\t";
         }
         for (int i = 0; i < dc_.num_dof_; i++)
         {
-            writeFile << measured_ext_[i] << "\t";
+            writeFile << measured_ext_torque_(i) << "\t";
         }
         writeFile << "\n";
     }
@@ -442,82 +612,44 @@ void PandaController::computeTrainedModel()
         at::Tensor output = trained_model_.forward(inputs).toTensor();
         // double* temp_arr = output.data_ptr<double>();
 
-        Eigen::VectorXd ext;
-        ext.resize(7);
+        Eigen::Matrix<double, 7, 1> ext;
         ext.setZero();
         ext = (A_*dc_.effort_ + non_linear_) - control_input_;
 
         for (int i= 0; i < dc_.num_dof_; i++)
         {
-            estimated_ext_(i) =  output.data()[0][i].item<double>()*100 - control_input_[i];
+            estimated_ext_torque_(i) = control_input_[i] - output.data()[0][i].item<double>()*100;
             if (i < 4)
             {
-                measured_ext_[i] = ext(i) + dc_.q_dot_(i) * 100.0;
+                measured_ext_torque_(i) = -(ext(i) + dc_.q_dot_(i) * 100.0);
             }
             else
             {
-                measured_ext_[i] = ext(i) + dc_.q_dot_(i) * 10.0;
+                measured_ext_torque_(i) = -(ext(i) + dc_.q_dot_(i) * 10.0);
             }
-        }
-        // std::cout << "Estimated: " << estimated_ext_(0) << std::endl;
-        // std::cout << "Measured: " << measured_ext_[0] << std::endl;
 
+        estimated_ext_torque_filtered_(i) = lowPassFilter(estimated_ext_torque_(i), estimated_ext_torque_filtered_(i), 1/hz_, 20.0);
+        }
+
+
+        // std::cout << "Estimated: " << estimated_ext_torque_(0) << "\t"<< estimated_ext_torque_(1) << "\t"<< estimated_ext_torque_(2) << "\t"<< estimated_ext_torque_(3) << "\t"<< estimated_ext_torque_(4) << "\t"<< estimated_ext_torque_(5) << "\t"<< estimated_ext_torque_(6)  << std::endl;
+        // std::cout << "Measured: " << measured_ext_torque_(0) << "\t"<< measured_ext_torque_(1) << "\t"<< measured_ext_torque_(2) << "\t"<< measured_ext_torque_(3) << "\t"<< measured_ext_torque_(4) << "\t"<< measured_ext_torque_(5) << "\t"<< measured_ext_torque_(6)  << std::endl;
+
+
+        estimated_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*estimated_ext_torque_filtered_;
+        measured_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*measured_ext_torque_;
+    }
+    if (int(cur_time_inference_*10) != int(pre_time_inference_*10))
+    {
+            std::cout <<"Estimated Force: " << estimated_ext_force_(0) <<"\t"<< estimated_ext_force_(1) <<"\t"<< estimated_ext_force_(2) <<std::endl;
+
+            Eigen::Vector3d measured_force;
+            measured_force = x_.linear() * dc_.force_;
+
+            std::cout <<"Measured Force: " << measured_force(0) <<"\t"<< measured_force(1) <<"\t"<< measured_force(2) <<std::endl;
+
+            // std::cout <<"Measured Force: " << measured_ext_force_(0) <<"\t"<< measured_ext_force_(1) <<"\t"<< measured_ext_force_(2) <<std::endl;
     }
 
     pre_time_inference_ = cur_time_inference_;
-}
-
-Eigen::Vector3d PandaController::quintic_spline(
-    double time,       // Current time
-    double time_0,     // Start time
-    double time_f,     // End time
-    double x_0,        // Start state
-    double x_dot_0,    // Start state dot
-    double x_ddot_0,   // Start state ddot
-    double x_f,        // End state
-    double x_dot_f,    // End state
-    double x_ddot_f    // End state ddot
-)
-{
-    double a1, a2, a3, a4, a5, a6;
-    double time_s;
-
-    Eigen::Vector3d result;
-
-    if (time < time_0)
-    {
-        result << x_0, x_dot_0, x_ddot_0;
-        return result;
-    }
-    else if (time > time_f)
-    {
-        result << x_f, x_dot_f, x_ddot_f;
-        return result;
-    }
-
-    time_s = time_f - time_0;
-    a1 = x_0; a2 = x_dot_0; a3 = (x_ddot_0 / 2.0);
-
-    Eigen::Matrix3d Temp;
-    Temp << pow(time_s, 3), pow(time_s, 4), pow(time_s, 5),
-        (3.0 * pow(time_s, 2)), (4.0 * pow(time_s, 3)), (5.0 * pow(time_s, 4)),
-        (6.0 * time_s), (12.0 * pow(time_s, 2)), (20.0 * pow(time_s, 3));
-
-    Eigen::Vector3d R_temp;
-    R_temp << (x_f - x_0 - x_dot_0 * time_s - x_ddot_0 * pow(time_s, 2) / 2.0),
-        (x_dot_f - x_dot_0 - x_ddot_0 * time_s),
-        (x_ddot_f - x_ddot_0);
-
-    Eigen::Vector3d RES;
-
-    RES = (Temp.inverse() * R_temp);
-    a4 = RES(0); a5 = RES(1); a6 = RES(2);
-
-    double time_fs = (time - time_0);
-    double position = (a1 + a2 * pow(time_fs, 1) + a3 * pow(time_fs, 2) + a4 * pow(time_fs, 3) + a5 * pow(time_fs, 4) + a6 * pow(time_fs, 5));
-    double velocity = (a2 + 2.0 * a3 * pow(time_fs, 1) + 3.0 * a4 * pow(time_fs, 2) + 4.0 * a5 * pow(time_fs, 3) + 5.0 * a6 * pow(time_fs, 4));
-    double acceleration = (2.0 * a3 + 6.0 * a4 * pow(time_fs, 1) + 12.0 * a5 * pow(time_fs, 2) + 20.0 * a6 * pow(time_fs, 3));
-    result << position, velocity, acceleration;
-
-    return result;
 }

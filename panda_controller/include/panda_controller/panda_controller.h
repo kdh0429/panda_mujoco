@@ -24,10 +24,10 @@
 
 #include <torch/script.h> 
 
-# define MODE_INIT = 105;
-# define MODE_HOME = 104;
-# define MODE_RANDOM = 114;
-# define MODE_FORCE = 102;
+# define MODE_INIT 105
+# define MODE_HOME 104
+# define MODE_RANDOM 114
+# define MODE_FORCE 102
 
 class PandaController{
     public:
@@ -42,14 +42,18 @@ class PandaController{
         void generateRandTrajThread();
         void generateRandTraj();
         void computeTrainedModel();
-        Eigen::Vector3d quintic_spline(double time, double time_0, double time_f, double x_0, double x_dot_0, double x_ddot_0, double x_f, double x_dot_f, double x_ddot_f);
 
     private:
+        double hz_ = 2000;
         double cur_time_;
         double pre_time_;
         double init_time_;
 
         int mode_ = 0;
+        double mode_init_time_ =  0.0;
+        Eigen::VectorXd q_mode_init_;
+        Eigen::VectorXd q_dot_mode_init_;
+        Eigen::Isometry3d x_mode_init_;
 
         std::mutex m_dc_;
         std::mutex m_ci_;
@@ -67,12 +71,23 @@ class PandaController{
         Eigen::VectorXd q_dot_;
         Eigen::VectorXd effort_;
 
+        Eigen::Isometry3d x_;
+        Eigen::VectorXd x_dot_;
+        Eigen::MatrixXd j_temp_;
+        Eigen::MatrixXd j_;
+
         // Control
         Eigen::VectorXd q_ddot_desired_;
         Eigen::VectorXd q_dot_desired_;
         Eigen::VectorXd q_desired_;
 
+        Eigen::Isometry3d x_target_;
+        Eigen::Isometry3d x_desired_;
+        Eigen::VectorXd x_dot_desired_;
+        Eigen::Isometry3d x_ddot_desired_;
+
         Eigen::MatrixXd kv, kp;
+        Eigen::MatrixXd kv_task_, kp_task_;
 
         Eigen::VectorXd control_input_;
 
@@ -80,6 +95,7 @@ class PandaController{
         RigidBodyDynamics::Model robot_;
         Eigen::VectorXd non_linear_;
         Eigen::MatrixXd A_;
+        Eigen::MatrixXd Lambda_;
 
         // Moveit
         inline static const std::string PLANNING_GROUP="panda_arm";
@@ -120,8 +136,12 @@ class PandaController{
 
         torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false).device(torch::kCPU);
         torch::Tensor input_tensor_ = torch::zeros({1, num_seq, num_features*num_joint}, options);
-        Eigen::VectorXd estimated_ext_;
-        double measured_ext_[num_joint];
+        Eigen::VectorXd estimated_ext_torque_;
+        Eigen::VectorXd estimated_ext_torque_filtered_;
+        Eigen::VectorXd measured_ext_torque_;
+        Eigen::VectorXd estimated_ext_force_;
+        Eigen::VectorXd estimated_ext_force_init_;
+        Eigen::VectorXd measured_ext_force_;
 
         double cur_time_inference_;
         double pre_time_inference_;

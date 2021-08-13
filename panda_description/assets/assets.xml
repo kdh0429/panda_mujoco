@@ -74,6 +74,7 @@
         <jointvel name="fr_arm_jv5" joint="panda0_joint5"/>
         <jointvel name="fr_arm_jv6" joint="panda0_joint6"/>
         <jointvel name="fr_arm_jv7" joint="panda0_joint7"/>
+        <force name="Force_sensor" site="FT"/>
     </sensor>
 
 </mujocoinclude>
