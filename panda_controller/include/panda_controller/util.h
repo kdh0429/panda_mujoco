@@ -8,7 +8,8 @@
 #include <Eigen/Geometry>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <Eigen/SVD>
- 
+
+
 static struct termios initial_settings, new_settings;
  
 static int peek_character = -1;
@@ -68,7 +69,20 @@ int _putch(int c) {
     fflush(stdout);
     return c;
 }
+namespace Eigen
+{
+// Eigen default type definition
+#define EIGEN_MAKE_TYPEDEFS(Type, TypeSuffix, Size, SizeSuffix)    \
+  typedef Matrix<Type, Size, Size> Matrix##SizeSuffix##TypeSuffix; \
+  typedef Matrix<Type, Size, 1> Vector##SizeSuffix##TypeSuffix;    \
+  typedef Matrix<Type, 1, Size> RowVector##SizeSuffix##TypeSuffix;
 
+  typedef double rScalar;
+
+  EIGEN_MAKE_TYPEDEFS(rScalar, d, 6, 6)
+  EIGEN_MAKE_TYPEDEFS(rScalar, d, 7, 7)
+
+} // namespace Eigen
 
 Eigen::Vector3d quintic_spline(
     double time,       // Current time

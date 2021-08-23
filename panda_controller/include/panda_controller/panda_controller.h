@@ -1,12 +1,12 @@
 #include <mutex>
-#include <Eigen/Dense>
-#include <Eigen/Geometry>
 #include <random>
 #include <math.h>
 
 #include <ros/ros.h>
 #include <ros/console.h>
 #include <ros/package.h>
+
+#include "panda_controller/util.h"
 
 #include "mujoco_ros_msgs/JointSet.h"
 
@@ -41,10 +41,13 @@ class PandaController{
         void setMoveitObstables();
         void generateRandTrajThread();
         void generateRandTraj();
+        void writeBuffer();
         void computeTrainedModel();
+        void getC();
+        void computeSOSML();
 
     private:
-        double hz_ = 2000;
+        double hz_ = 1000;
         double cur_time_;
         double pre_time_;
         double init_time_;
@@ -57,6 +60,10 @@ class PandaController{
 
         std::mutex m_dc_;
         std::mutex m_ci_;
+        std::mutex m_ext_;
+        std::mutex m_buffer_;
+        std::mutex m_rbdl_;
+
         DataContainer &dc_;
 
         bool is_init_ = false;
@@ -95,6 +102,8 @@ class PandaController{
         RigidBodyDynamics::Model robot_;
         Eigen::VectorXd non_linear_;
         Eigen::MatrixXd A_;
+        Eigen::MatrixXd C_;
+        
         Eigen::MatrixXd Lambda_;
 
         // Moveit
@@ -140,9 +149,26 @@ class PandaController{
         Eigen::VectorXd estimated_ext_torque_filtered_;
         Eigen::VectorXd measured_ext_torque_;
         Eigen::VectorXd estimated_ext_force_;
+        Eigen::VectorXd estimated_ext_force_pre_;
         Eigen::VectorXd estimated_ext_force_init_;
         Eigen::VectorXd measured_ext_force_;
 
         double cur_time_inference_;
         double pre_time_inference_;
+
+        // Force Control
+        double f_I_ = 0.0;
+
+        // Sliding Mode Momentum Observer
+        Eigen::Vector7d p_;
+        Eigen::Vector7d p_hat_;
+        Eigen::Vector7d p_tilde_;
+        Eigen::Vector7d p_tilde_sign_;
+        
+        Eigen::VectorXd g_;
+        
+        Eigen::Vector7d sigma_;
+
+        Eigen::Matrix7d T1_, T2_;
+        Eigen::Matrix7d S1_, S2_;
 };
