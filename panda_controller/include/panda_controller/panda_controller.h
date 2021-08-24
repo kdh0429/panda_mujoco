@@ -70,7 +70,7 @@ class PandaController{
 
         double sim_time_ = 0.0;
 
-        bool is_write_ = false;
+        bool is_write_ = true;
         std::ofstream writeFile;
 
         // Robot State
@@ -158,6 +158,7 @@ class PandaController{
 
         // Force Control
         double f_I_ = 0.0;
+        double f_d_x_ = 0.0;
 
         // Sliding Mode Momentum Observer
         Eigen::Vector7d p_;

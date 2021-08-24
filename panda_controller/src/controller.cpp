@@ -305,10 +305,12 @@ void PandaController::compute()
                 S1_.setZero();
                 S2_.setZero();
 
-                T1_.diagonal() << 2*sqrt(80), 2*sqrt(80), 2*sqrt(80), 2*sqrt(80), 2*sqrt(80), 2*sqrt(80), 2*sqrt(80);
-                T2_.diagonal() << 80, 80, 80, 80, 80, 80, 80;
-                S1_.diagonal() << 80, 80, 80, 80, 80, 80, 80;
-                S2_.diagonal() << 1600, 1600, 1600, 1600, 1600, 1600, 1600;
+                double s1 = 160;
+                double s2 = 2500;
+                T1_.diagonal() << 2.6*sqrt(s1), 2.6*sqrt(s1), 2.6*sqrt(s1), 2.6*sqrt(s1), 2.6*sqrt(s1), 2.6*sqrt(s1), 2.6*sqrt(s1);
+                T2_.diagonal() << 2*sqrt(s2), 2*sqrt(s2), 2*sqrt(s2), 2*sqrt(s2), 2*sqrt(s2), 2*sqrt(s2), 2*sqrt(s2);
+                S1_.diagonal() << s1, s1, s1, s1, s1, s1, s1;
+                S2_.diagonal() << s2, s2, s2, s2, s2, s2, s2;
 
                 init_time_ = ros::Time::now().toSec();
 
@@ -549,28 +551,28 @@ void PandaController::computeControlInput()
         f_star = kp_task_*x_error +kv_task_*x_dot_error;
 
         // Force control x
-        double f_d_x = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, estimated_ext_force_init_(0), 20.0, 0.0, 0.0);
+        f_d_x_ = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, estimated_ext_force_init_(0), 10.0, 0.0, 0.0);
         double k_p_force = 0.05;
         double k_v_force = 0.001;
         m_ext_.lock();
-        f_star(0) = k_p_force*(f_d_x - estimated_ext_force_(0)) + k_v_force*(estimated_ext_force_(0) - estimated_ext_force_pre_(0))/hz_;
+        f_star(0) = k_p_force*(f_d_x_ - estimated_ext_force_(0)) + k_v_force*(estimated_ext_force_(0) - estimated_ext_force_pre_(0))/hz_;
         m_ext_.unlock();
         estimated_ext_force_pre_ = estimated_ext_force_;
 
         // Eigen::VectorXd F_d;
         // F_d.resize(6);
         // F_d.setZero();
-        // F_d(0) = f_d_x;
+        // F_d(0) = f_d_x_;
 
         // control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
 
         f_star(0) = 0.0;
-        f_I_ = f_I_ + 1.0 * (f_d_x - measured_ext_force_(0)) / hz_;
+        f_I_ = f_I_ + 1.0 * (f_d_x_ - estimated_ext_force_(0)) / hz_;
 
         Eigen::VectorXd F_d;
         F_d.resize(6);
         F_d.setZero();
-        F_d(0) = f_d_x + f_I_;
+        F_d(0) = f_d_x_ + f_I_;
         
         control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
     }
@@ -609,6 +611,7 @@ void PandaController::logData()
     if (int(cur_time_*100) != int(pre_time_*100))
     {
         writeFile << cur_time_ << "\t";
+
         // for (int i = 0; i < dc_.num_dof_; i++)
         // {
         //     writeFile << q_(i) << "\t";
@@ -634,19 +637,30 @@ void PandaController::logData()
         //     writeFile << control_input_(i) << "\t";
         // }
 
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << estimated_ext_torque_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << measured_ext_torque_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << -sigma_(i) << "\t";
-        }
-        writeFile << "\n";
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << estimated_ext_torque_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << measured_ext_torque_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     if (i < 4)
+        //     {
+        //         writeFile << -(sigma_(i)+dc_.q_dot_(i) * 100.0)<< "\t";
+        //     }
+        //     else
+        //     {
+        //         writeFile << -(sigma_(i)+dc_.q_dot_(i) * 10.0)<< "\t";
+        //     }
+        // }
+
+        // writeFile << "\n";
+
+        writeFile << f_d_x_ << "\t" << estimated_ext_force_(0) << "\t" << measured_ext_force_(0) << "\t" << -dc_.force_(0) << std::endl;
+
     }
 }
 
@@ -701,7 +715,7 @@ void PandaController::computeTrainedModel()
             
             m_rbdl_.lock();
             m_ext_.lock();
-            estimated_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*estimated_ext_torque_filtered_;
+            estimated_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*estimated_ext_torque_;
             measured_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*measured_ext_torque_;
             m_ext_.unlock();
             m_rbdl_.unlock();
@@ -713,9 +727,9 @@ void PandaController::computeTrainedModel()
                     // Eigen::Vector3d measured_force;
                     // measured_force = x_.linear() * dc_.force_;
 
-                    // std::cout <<"FT Measured Force: " << measured_force(0) <<"\t"<< measured_force(1) <<"\t"<< measured_force(2) <<std::endl;
+                    std::cout <<"FT Measured Force: " << dc_.force_(0) <<"\t"<< dc_.force_(1) <<"\t"<< dc_.force_(2) <<std::endl;
 
-                    std::cout <<"Measured Force: " << measured_ext_force_(0) <<"\t"<< measured_ext_force_(1) <<"\t"<< measured_ext_force_(2) <<std::endl;
+                    std::cout <<"Measured Force: " << measured_ext_force_(0) <<"\t"<< measured_ext_force_(1) <<"\t"<< measured_ext_force_(2) <<std::endl << std::endl;
                     
                     // std::cout <<"LSTM Ext: " << measured_ext_torque_(0) <<"\t"<< measured_ext_torque_(1) <<"\t"<< measured_ext_torque_(2) <<std::endl;
                     // std::cout <<"SOSML Ext: " << sigma_(0) <<"\t"<< sigma_(1) <<"\t"<< sigma_(2) <<std::endl;
@@ -781,9 +795,11 @@ void PandaController::computeSOSML()
 
     for (int i = 0; i < dc_.num_dof_; i++)
     {
-        if (p_tilde_(i) >= 0)
+        if (p_tilde_(i) > 0)
             p_tilde_sign_(i) = 1;
-        else
+        else if (p_tilde_(i) == 0.0)
+            p_tilde_sign_(i) = 0.0;
+        else 
             p_tilde_sign_(i) = -1;
     }
 
