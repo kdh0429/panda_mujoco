@@ -36,12 +36,12 @@
       <mass
         value="2.91242" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
    <link name="panda_link1">
@@ -62,12 +62,12 @@
       <mass
         value="2.7063" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
 
   </link>
@@ -99,12 +99,12 @@
       <mass
         value="2.73046" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
   <joint name="panda_joint2" type="revolute">
@@ -134,12 +134,12 @@
       <mass
         value="2.04104" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
   <joint name="panda_joint3" type="revolute">
@@ -169,12 +169,12 @@
       <mass
         value="2.08129" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
   <joint name="panda_joint4" type="revolute">
@@ -204,12 +204,12 @@
       <mass
         value="3.00049" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
   <joint name="panda_joint5" type="revolute">
@@ -239,12 +239,12 @@
       <mass
         value="1.3235" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
   <joint name="panda_joint6" type="revolute">
@@ -274,12 +274,12 @@
       <mass
         value="0.2" />
       <inertia
-        ixx="0.0000001"
+        ixx="0.01"
         ixy="0.0"
         ixz="0.0"
-        iyy="0.0000001"
+        iyy="0.01"
         iyz="0.0"
-        izz="0.0000001" />
+        izz="0.01" />
     </inertial>
   </link>
   <joint name="panda_joint7" type="revolute">

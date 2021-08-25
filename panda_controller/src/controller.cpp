@@ -612,30 +612,30 @@ void PandaController::logData()
     {
         writeFile << cur_time_ << "\t";
 
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_dot_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_desired_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_dot_desired_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_ddot_desired_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << control_input_(i) << "\t";
-        // }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_dot_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_dot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_ddot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << control_input_(i) << "\t";
+        }
 
         // for (int i = 0; i < dc_.num_dof_; i++)
         // {
@@ -657,10 +657,9 @@ void PandaController::logData()
         //     }
         // }
 
-        // writeFile << "\n";
+        // writeFile << f_d_x_ << "\t" << estimated_ext_force_(0) << "\t" << measured_ext_force_(0) << "\t" << -dc_.force_(0);
 
-        writeFile << f_d_x_ << "\t" << estimated_ext_force_(0) << "\t" << measured_ext_force_(0) << "\t" << -dc_.force_(0) << std::endl;
-
+        writeFile << "\n";
     }
 }
 
@@ -722,14 +721,14 @@ void PandaController::computeTrainedModel()
             
             if (int(cur_time_inference_*10) != int(pre_time_inference_*10))
             {
-                    std::cout <<"Estimated Force: " << estimated_ext_force_(0) <<"\t"<< estimated_ext_force_(1) <<"\t"<< estimated_ext_force_(2) <<std::endl;
+                    // std::cout <<"Estimated Force: " << estimated_ext_force_(0) <<"\t"<< estimated_ext_force_(1) <<"\t"<< estimated_ext_force_(2) <<std::endl;
 
                     // Eigen::Vector3d measured_force;
                     // measured_force = x_.linear() * dc_.force_;
 
-                    std::cout <<"FT Measured Force: " << dc_.force_(0) <<"\t"<< dc_.force_(1) <<"\t"<< dc_.force_(2) <<std::endl;
+                    // std::cout <<"FT Measured Force: " << dc_.force_(0) <<"\t"<< dc_.force_(1) <<"\t"<< dc_.force_(2) <<std::endl;
 
-                    std::cout <<"Measured Force: " << measured_ext_force_(0) <<"\t"<< measured_ext_force_(1) <<"\t"<< measured_ext_force_(2) <<std::endl << std::endl;
+                    // std::cout <<"Measured Force: " << measured_ext_force_(0) <<"\t"<< measured_ext_force_(1) <<"\t"<< measured_ext_force_(2) <<std::endl << std::endl;
                     
                     // std::cout <<"LSTM Ext: " << measured_ext_torque_(0) <<"\t"<< measured_ext_torque_(1) <<"\t"<< measured_ext_torque_(2) <<std::endl;
                     // std::cout <<"SOSML Ext: " << sigma_(0) <<"\t"<< sigma_(1) <<"\t"<< sigma_(2) <<std::endl;
