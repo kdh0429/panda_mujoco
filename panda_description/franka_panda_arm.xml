@@ -14,6 +14,7 @@
     <worldbody>
         <!-- <body name="table" pos="0.61 0.0 0.5" zaxis="0 0 1">
             <geom size="0.2 4.0 1.0" type="box" />
+            <site name="FT" pos="0 0 0"/>
         </body> -->
         <include file="assets/chain0_nogripper.xml"/>
     </worldbody>

@@ -26,7 +26,7 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
 
     // Torch
     try {
-        trained_model_ = torch::jit::load("/home/kim/ssd2/PandaResidual/model/traced_model.pt");
+        trained_model_ = torch::jit::load("/home/kim/ssd2/PandaResidual/model/traced_model_lstm.pt");
     }
     catch (const c10::Error& e) {
         std::cerr << "Error loading the model\n";
@@ -44,7 +44,7 @@ PandaController::~PandaController()
 void PandaController::initMoveit()
 {
     const robot_state::JointModelGroup* joint_model_group = move_group_.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-    move_group_.setMaxVelocityScalingFactor(5.0);
+    move_group_.setMaxVelocityScalingFactor(1.0);
 
     namespace rvt = rviz_visual_tools;
     moveit_visual_tools::MoveItVisualTools visual_tools("panda_link0");
@@ -194,11 +194,8 @@ void PandaController::compute()
             if (!is_init_)
             {
                 // Robot State
-                q_.resize(dc_.num_dof_);
                 q_.setZero();
-                q_dot_.resize(dc_.num_dof_);
                 q_dot_.setZero();
-                effort_.resize(dc_.num_dof_);
                 effort_.setZero();
 
                 q_mode_init_.resize(dc_.num_dof_);
@@ -273,12 +270,16 @@ void PandaController::compute()
 
                 // Torch
                 std::fill(ring_buffer_, ring_buffer_+num_seq*num_features*num_joint, 0);
-                estimated_ext_torque_.resize(dc_.num_dof_);
-                estimated_ext_torque_.setZero();
-                estimated_ext_torque_filtered_.resize(dc_.num_dof_);
-                estimated_ext_torque_filtered_.setZero();
+                estimated_ext_torque_LSTM_.resize(dc_.num_dof_);
+                estimated_ext_torque_LSTM_.setZero();
                 measured_ext_torque_.resize(dc_.num_dof_);
                 measured_ext_torque_.setZero();
+                estimated_ext_force_SOSML_.resize(dc_.num_dof_);
+                estimated_ext_force_SOSML_.setZero();
+                estimated_ext_force_ESO_.resize(dc_.num_dof_);
+                estimated_ext_force_ESO_.setZero();
+                estimated_ext_force_HOFTO_.resize(dc_.num_dof_);
+                estimated_ext_force_HOFTO_.setZero();
 
                 estimated_ext_force_.resize(6);
                 estimated_ext_force_.setZero();
@@ -312,6 +313,61 @@ void PandaController::compute()
                 S1_.diagonal() << s1, s1, s1, s1, s1, s1, s1;
                 S2_.diagonal() << s2, s2, s2, s2, s2, s2, s2;
 
+                estimated_ext_torque_SOSML_.setZero();
+
+                // Extended State Observer
+                x1_.setZero();
+                x1_hat_.setZero();
+                x1_tilde_.setZero();
+                x2_hat_.setZero();
+                x3_hat_.setZero();
+
+                eta1_ = 10.0;
+                eta2_ = 1.0;
+                epsilon_ = 0.01;
+
+                A_ESO_.resize(dc_.num_dof_, dc_.num_dof_);
+                A_ESO_.setZero();
+                C_ESO_.setZero();
+                g_ESO_.resize(dc_.num_dof_);
+                g_ESO_.setZero();
+
+                estimated_ext_torque_ESO_.setZero();
+
+                // High-Order Finite Time Observer
+                z1_.setZero(); 
+                z2_.setZero();
+                z3_.setZero();
+                z4_.setZero();
+
+                x1_z1_diff_.setZero();
+
+                L1_.diagonal() << 22.3607,22.3607,21.6265,20.8090,20.8090,20.8090,20.8090; 
+                L2_.diagonal() << 22.101,22.101,21.1419,20.083,20.083,20.083,20.083;
+                L3_.diagonal() << 30,30,28.0624,25.9808,25.9808,25.9808,25.9808;
+                L4_.diagonal() << 440,440,385,330,330,330,330;
+
+                L1_.diagonal() = L1_.diagonal()*0.1;
+                L2_.diagonal() = L2_.diagonal()*0.1;
+                L3_.diagonal() = L3_.diagonal()*0.1;
+                L4_.diagonal() = L4_.diagonal()*0.1;
+
+                x1_HOFTO_.setZero();
+                x2_HOFTO_.setZero();
+
+                m2_ = 1 + (2-1) * (-2/9); // 7/9
+                m3_ = 1 + (3-1) * (-2/9); // 5/7
+                m4_ = 1 + (4-1) * (-2/9); // 3/7
+                m5_ = 1 + (5-1) * (-2/9); // 1/7
+
+                A_HOFTO_.resize(dc_.num_dof_, dc_.num_dof_);
+                A_HOFTO_.setZero();
+                
+                non_linear_HOFTO_.resize(dc_.num_dof_);
+                non_linear_HOFTO_.setZero();
+
+                estimated_ext_torque_HOFTO_.setZero();
+
                 init_time_ = ros::Time::now().toSec();
 
                 is_init_ = true;
@@ -329,9 +385,17 @@ void PandaController::compute()
                 m_dc_.unlock();
 
                 updateKinematicsDynamics();
-                computeSOSML();
+                if (mode_ == MODE_STOP || mode_ == MODE_RANDOM)
+                {
+                    computeSOSML();
+                    computeESO();
+                    computeHOFTO();
+                }
                 computeControlInput();  
                 writeBuffer();
+
+                printData();
+                
                 if (is_write_)
                 {
                     logData();
@@ -368,6 +432,9 @@ void PandaController::compute()
                         break;
                     case(102):
                         std::cout << "Force Control" << std::endl;
+                        break;
+                    case(115):
+                        std::cout << "Stop" << std::endl;
                         break;
                 }
             }
@@ -409,7 +476,7 @@ void PandaController::updateKinematicsDynamics()
     A_.setZero();
     RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_, A_, true);
 
-    getC();
+    C_ = getC(q_, q_dot_);
     m_rbdl_.unlock();
 
     Lambda_ = (j_ * A_.inverse() * j_.transpose()).inverse();
@@ -419,7 +486,7 @@ void PandaController::computeControlInput()
 {
     if(mode_ == MODE_RANDOM)
     {
-        if (cur_time_ >= traj_init_time_ + traj_duration_)
+        if (cur_time_ >= traj_init_time_ + traj_duration_ + 1.0)
         {   
             random_plan_ = random_plan_next_;
             cur_waypoint_ = 0;
@@ -435,8 +502,11 @@ void PandaController::computeControlInput()
             std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
             std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
         }
-
-        if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
+        else if (cur_time_ >= traj_init_time_ + traj_duration_)
+        {
+            // Rest
+        }
+        else if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
         {
             if (cur_waypoint_ < total_waypoints_-2)
                 cur_waypoint_++;
@@ -576,7 +646,10 @@ void PandaController::computeControlInput()
         
         control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
     }
-
+    else if (mode_ == MODE_STOP)
+    {
+        control_input_ = non_linear_;
+    }
     else
     {
         control_input_ = non_linear_;
@@ -612,54 +685,119 @@ void PandaController::logData()
     {
         writeFile << cur_time_ << "\t";
 
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_dot_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_dot_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_ddot_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << control_input_(i) << "\t";
-        }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_dot_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_dot_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_ddot_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << control_input_(i) << "\t";
+        // }
 
         // for (int i = 0; i < dc_.num_dof_; i++)
         // {
-        //     writeFile << estimated_ext_torque_(i) << "\t";
+        //     writeFile << lstm_output_.data()[0][i].item<double>() << "\t";
         // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << measured_ext_torque_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     if (i < 4)
-        //     {
-        //         writeFile << -(sigma_(i)+dc_.q_dot_(i) * 100.0)<< "\t";
-        //     }
-        //     else
-        //     {
-        //         writeFile << -(sigma_(i)+dc_.q_dot_(i) * 10.0)<< "\t";
-        //     }
-        // }
+        
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << estimated_ext_torque_LSTM_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << measured_ext_torque_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << estimated_ext_torque_SOSML_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << estimated_ext_torque_ESO_(i) << "\t";
+        }
 
         // writeFile << f_d_x_ << "\t" << estimated_ext_force_(0) << "\t" << measured_ext_force_(0) << "\t" << -dc_.force_(0);
 
         writeFile << "\n";
+    }
+}
+
+void PandaController::printData()
+{
+    Eigen::Matrix<double, 7, 1> ext;
+    ext.setZero();
+    ext = (A_*dc_.effort_ + non_linear_) - control_input_;
+
+    Eigen::Vector7d lstm_output_copy;
+    m_ext_.lock();
+    lstm_output_copy = lstm_output_share_;
+    m_ext_.unlock();
+
+
+    for (int i= 0; i < dc_.num_dof_; i++)
+    {
+        estimated_ext_torque_LSTM_(i) = control_input_[i] - lstm_output_copy(i);
+
+        if (i < 4)
+        {
+            measured_ext_torque_(i) = -(ext(i) + dc_.q_dot_(i) * 100.0);
+            estimated_ext_torque_SOSML_(i) = estimated_ext_torque_SOSML_(i) - dc_.q_dot_(i) * 100.0;
+            estimated_ext_torque_ESO_(i) = estimated_ext_torque_ESO_(i) - dc_.q_dot_(i) * 100.0;
+            estimated_ext_torque_HOFTO_(i) = estimated_ext_torque_HOFTO_(i) - dc_.q_dot_(i) * 100.0;
+        }
+        else
+        {
+            measured_ext_torque_(i) = -(ext(i) + dc_.q_dot_(i) * 10.0);
+            estimated_ext_torque_SOSML_(i) = estimated_ext_torque_SOSML_(i) - dc_.q_dot_(i) * 10.0;
+            estimated_ext_torque_ESO_(i) = estimated_ext_torque_ESO_(i) - dc_.q_dot_(i) * 10.0;
+            estimated_ext_torque_HOFTO_(i) = estimated_ext_torque_HOFTO_(i) - dc_.q_dot_(i) * 10.0;
+        }
+    }
+    
+    j_dyn_cons_inv_T_ = (j_*A_.inverse()*j_.transpose()).inverse() * j_ * A_.inverse();
+
+    estimated_ext_force_ = j_dyn_cons_inv_T_*estimated_ext_torque_LSTM_;
+
+    estimated_ext_force_SOSML_ = j_dyn_cons_inv_T_*estimated_ext_torque_SOSML_;
+    estimated_ext_force_ESO_ = j_dyn_cons_inv_T_*estimated_ext_torque_ESO_;
+    estimated_ext_force_HOFTO_ = j_dyn_cons_inv_T_*estimated_ext_torque_HOFTO_;
+
+    measured_ext_force_ = j_dyn_cons_inv_T_*measured_ext_torque_;
+    
+    if (int(cur_time_*10) != int(pre_time_*10))
+    {
+        std::cout <<"FT Measured Force: " << dc_.force_(0) <<std::setw(12)<< dc_.force_(1) <<std::setw(12)<< dc_.force_(2) <<std::endl;
+        std::cout <<"Dynamics Measured Force: " << measured_ext_force_(0) <<std::setw(12)<< measured_ext_force_(1) <<std::setw(12)<< measured_ext_force_(2) <<std::endl << std::endl;
+
+        std::cout <<"Estimated Force LSTM: " << estimated_ext_force_(0) <<std::setw(12)<< estimated_ext_force_(1) <<std::setw(12)<< estimated_ext_force_(2) <<std::endl;
+        std::cout <<"Estimated Force SOSML: " << estimated_ext_force_SOSML_(0) <<std::setw(12)<< estimated_ext_force_SOSML_(1) <<std::setw(12)<< estimated_ext_force_SOSML_(2) <<std::endl;
+        std::cout <<"Estimated Force ESO: " << estimated_ext_force_ESO_(0) <<std::setw(12)<< estimated_ext_force_ESO_(1) <<std::setw(12)<< estimated_ext_force_ESO_(2) <<std::endl;
+        std::cout <<"Estimated Force HOFTO: " << estimated_ext_force_HOFTO_(0) <<std::setw(12)<< estimated_ext_force_HOFTO_(1) <<std::setw(12)<< estimated_ext_force_HOFTO_(2) <<std::endl << std::endl;
+
+        
+        std::cout <<"LSTM Ext: " << std::setw(12) << estimated_ext_torque_LSTM_(0) << std::setw(12) << estimated_ext_torque_LSTM_(1) << std::setw(12) << estimated_ext_torque_LSTM_(2) <<std::setw(12)<< estimated_ext_torque_LSTM_(3) << std::setw(12) << estimated_ext_torque_LSTM_(4)<< std::setw(12) << estimated_ext_torque_LSTM_(5) << std::setw(12) << estimated_ext_torque_LSTM_(6) <<std::endl;
+        std::cout <<"SOSML Ext: " << estimated_ext_torque_SOSML_(0) <<std::setw(12)<< estimated_ext_torque_SOSML_(1) << std::setw(12) << estimated_ext_torque_SOSML_(2) << std::setw(12) << estimated_ext_torque_SOSML_(3) << std::setw(12) << estimated_ext_torque_SOSML_(4) << std::setw(12) << estimated_ext_torque_SOSML_(5) << std::setw(12) << estimated_ext_torque_SOSML_(6) <<std::endl;
+        std::cout <<"ESO Ext: " << estimated_ext_torque_ESO_(0) <<std::setw(12)<< estimated_ext_torque_ESO_(1) <<std::setw(12)<< estimated_ext_torque_ESO_(2) <<std::setw(12) << estimated_ext_torque_ESO_(3) <<std::setw(12)<< estimated_ext_torque_ESO_(4) <<std::setw(12)<< estimated_ext_torque_ESO_(5) <<std::setw(12)<< estimated_ext_torque_ESO_(6) <<std::endl;
+        std::cout <<"HOFTO Ext: " << estimated_ext_torque_HOFTO_(0) <<std::setw(12)<< estimated_ext_torque_HOFTO_(1) <<std::setw(12)<< estimated_ext_torque_HOFTO_(2) <<std::setw(12) << estimated_ext_torque_HOFTO_(3) <<std::setw(12)<< estimated_ext_torque_HOFTO_(4) <<std::setw(12)<< estimated_ext_torque_HOFTO_(5) <<std::setw(12)<< estimated_ext_torque_HOFTO_(6) <<std::endl;
+        
+
+        std::cout << std::endl;
     }
 }
 
@@ -669,8 +807,6 @@ void PandaController::computeTrainedModel()
     {
         if (is_init_)
         {
-            cur_time_inference_= ros::Time::now().toSec() - init_time_;
-
             m_buffer_.lock();
             for (int seq = 0; seq < num_seq; seq++)
             {
@@ -689,66 +825,28 @@ void PandaController::computeTrainedModel()
             inputs.push_back(input_tensor_);
 
             // Execute the model and turn its output into a tensor.
-            at::Tensor output = trained_model_.forward(inputs).toTensor();
-            // double* temp_arr = output.data_ptr<double>();
 
-            Eigen::Matrix<double, 7, 1> ext;
-            ext.setZero();
-            ext = (A_*dc_.effort_ + non_linear_) - control_input_;
-
+            lstm_output_ = trained_model_.forward(inputs).toTensor();
+            m_ext_.lock();
             for (int i= 0; i < dc_.num_dof_; i++)
             {
-                estimated_ext_torque_(i) = control_input_[i] - output.data()[0][i].item<double>()*100;
-
-                if (i < 4)
-                {
-                    measured_ext_torque_(i) = -(ext(i) + dc_.q_dot_(i) * 100.0);
-                }
-                else
-                {
-                    measured_ext_torque_(i) = -(ext(i) + dc_.q_dot_(i) * 10.0);
-                }
-
-                estimated_ext_torque_filtered_(i) = lowPassFilter(estimated_ext_torque_(i), estimated_ext_torque_filtered_(i), 1/hz_, 20.0);
+                lstm_output_share_(i) = lstm_output_.data()[0][i].item<double>();
             }
-            
-            m_rbdl_.lock();
-            m_ext_.lock();
-            estimated_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*estimated_ext_torque_;
-            measured_ext_force_ = (j_.transpose()*((j_*j_.transpose()).inverse())).transpose()*measured_ext_torque_;
             m_ext_.unlock();
-            m_rbdl_.unlock();
-            
-            if (int(cur_time_inference_*10) != int(pre_time_inference_*10))
-            {
-                    // std::cout <<"Estimated Force: " << estimated_ext_force_(0) <<"\t"<< estimated_ext_force_(1) <<"\t"<< estimated_ext_force_(2) <<std::endl;
-
-                    // Eigen::Vector3d measured_force;
-                    // measured_force = x_.linear() * dc_.force_;
-
-                    // std::cout <<"FT Measured Force: " << dc_.force_(0) <<"\t"<< dc_.force_(1) <<"\t"<< dc_.force_(2) <<std::endl;
-
-                    // std::cout <<"Measured Force: " << measured_ext_force_(0) <<"\t"<< measured_ext_force_(1) <<"\t"<< measured_ext_force_(2) <<std::endl << std::endl;
-                    
-                    // std::cout <<"LSTM Ext: " << measured_ext_torque_(0) <<"\t"<< measured_ext_torque_(1) <<"\t"<< measured_ext_torque_(2) <<std::endl;
-                    // std::cout <<"SOSML Ext: " << sigma_(0) <<"\t"<< sigma_(1) <<"\t"<< sigma_(2) <<std::endl;
-            }
-
-            pre_time_inference_ = cur_time_inference_;
         }
     }
 }
 
 
-void PandaController::getC(){
+Eigen::Matrix7d PandaController::getC(Eigen::Vector7d q, Eigen::Vector7d q_dot){
     double h = 2e-12;
 
     Eigen::VectorXd q_new;
     q_new.resize(dc_.num_dof_);
     
-    Eigen::MatrixXd C1(dc_.num_dof_, dc_.num_dof_);
+    Eigen::Matrix7d C, C1, C2;
+    C.setZero();
     C1.setZero();
-    Eigen::MatrixXd C2(dc_.num_dof_, dc_.num_dof_);
     C2.setZero();
 
     Eigen::MatrixXd A(dc_.num_dof_, dc_.num_dof_), A_new(dc_.num_dof_, dc_.num_dof_);
@@ -757,17 +855,17 @@ void PandaController::getC(){
 
     for (int i = 0; i < dc_.num_dof_; i++)
     {
-        q_new = q_;
+        q_new = q;
         q_new(i) += h;
 
         A.setZero();
         A_new.setZero();
 
-        RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_, A_, true);
+        RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q, A, true);
         RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_new, A_new, true);
 
         m[i].resize(dc_.num_dof_, dc_.num_dof_);
-        m[i] = (A_new - A_) / h;
+        m[i] = (A_new - A) / h;
     }
 
     for (int i = 0; i < dc_.num_dof_; i++)
@@ -778,15 +876,18 @@ void PandaController::getC(){
 
     for (int i = 0; i < dc_.num_dof_; i++)
         for (int j = 0; j < dc_.num_dof_; j++)
-            C1(i, j) = b[i][j][j] * q_dot_(j);
+            C1(i, j) = b[i][j][j] * q_dot(j);
 
     for (int k = 0; k < dc_.num_dof_; k++)
         for (int j = 0; j < dc_.num_dof_; j++)
             for (int i = 1 + j; i < dc_.num_dof_; i++)
-            C2(k, j) += 2.0 * b[k][j][i] * q_dot_(i);
-    C_ = C1 + C2;
+            C2(k, j) += 2.0 * b[k][j][i] * q_dot(i);
+    C = C1 + C2;
+
+    return C;
 }
 
+// "Sliding Mode Momentum Observers for Estimation of External Torques and Joint Acceleration"
 void PandaController::computeSOSML()
 {
     p_ = A_*q_dot_;
@@ -804,4 +905,53 @@ void PandaController::computeSOSML()
 
     p_hat_ = p_hat_ + (control_input_ + C_.transpose()*q_dot_ - g_ - T1_*p_tilde_.cwiseAbs().cwiseSqrt().cwiseProduct(p_tilde_sign_) - T2_*p_tilde_ + sigma_) / hz_;
     sigma_ = sigma_ + (-S1_*p_tilde_sign_ - S2_*p_tilde_) / hz_;
+
+    estimated_ext_torque_SOSML_ = -sigma_;
+}
+
+// "Interaction Force Estimation Using Extended State Observers: An Application to Impedance-Based Assistive and Rehabilitation Robotics"
+void PandaController::computeESO()
+{
+    x1_ = q_;
+    x1_tilde_ = x1_ - x1_hat_;
+
+    A_ESO_.setZero();
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, x1_hat_, A_ESO_, true);
+    Eigen::Vector7d q_dot_zero;
+    q_dot_zero.setZero();
+    RigidBodyDynamics::NonlinearEffects(robot_, x1_hat_, q_dot_zero, g_ESO_);
+    C_ESO_ = getC(x1_hat_, x2_hat_);
+
+    x1_hat_ = x1_hat_ + (x2_hat_ + eta1_/epsilon_*x1_tilde_) / hz_;
+    x2_hat_ = x2_hat_ + (A_ESO_.inverse()*(-C_ESO_*x2_hat_ - g_ESO_) + A_.inverse()*control_input_ + A_.inverse()*x3_hat_ + eta2_/pow(epsilon_,2)*x1_tilde_)/ hz_;
+    x3_hat_ = x3_hat_ + (1/pow(epsilon_,3) * x1_tilde_) / hz_;
+
+    estimated_ext_torque_ESO_ = -x3_hat_;
+}
+
+void PandaController::computeHOFTO()
+{
+    x1_HOFTO_ = q_;
+    x2_HOFTO_ = q_dot_;
+
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, x1_HOFTO_, A_HOFTO_, true);
+    RigidBodyDynamics::NonlinearEffects(robot_, x1_HOFTO_, x2_HOFTO_, non_linear_HOFTO_);
+
+    x1_z1_diff_ = x1_HOFTO_ - z1_;
+
+    Eigen::Vector7d pow_m2, pow_m3, pow_m4, pow_m5; 
+    for (int i = 0; i < dc_.num_dof_; i++)
+    {
+        pow_m2(i) = pow(x1_z1_diff_(i), m2_);
+        pow_m3(i) = pow(x1_z1_diff_(i), m3_);
+        pow_m4(i) = pow(x1_z1_diff_(i), m4_);
+        pow_m5(i) = pow(x1_z1_diff_(i), m5_);
+    }
+
+    z1_ = z1_ + (z2_ + L1_*pow_m2)/hz_;
+    z2_ = z2_ + (z3_ + A_HOFTO_.inverse()*control_input_ - A_HOFTO_.inverse()*non_linear_HOFTO_ + L2_*pow_m3)/hz_;
+    z3_ = z3_ + (z4_ + L3_*pow_m4)/hz_;
+    z4_ = z4_ + (L4_*pow_m5)/hz_;
+
+    estimated_ext_torque_HOFTO_ = -A_HOFTO_ * z4_;
 }

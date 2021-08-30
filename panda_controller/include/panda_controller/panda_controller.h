@@ -28,6 +28,7 @@
 # define MODE_HOME 104
 # define MODE_RANDOM 114
 # define MODE_FORCE 102
+# define MODE_STOP 115
 
 class PandaController{
     public:
@@ -37,14 +38,17 @@ class PandaController{
         void updateKinematicsDynamics();
         void computeControlInput();
         void logData();
+        void printData();
         void initMoveit();
         void setMoveitObstables();
         void generateRandTrajThread();
         void generateRandTraj();
         void writeBuffer();
         void computeTrainedModel();
-        void getC();
+        Eigen::Matrix7d getC(Eigen::Vector7d q, Eigen::Vector7d q_dot);
         void computeSOSML();
+        void computeESO();
+        void computeHOFTO();
 
     private:
         double hz_ = 1000;
@@ -74,9 +78,9 @@ class PandaController{
         std::ofstream writeFile;
 
         // Robot State
-        Eigen::VectorXd q_;
-        Eigen::VectorXd q_dot_;
-        Eigen::VectorXd effort_;
+        Eigen::Vector7d q_;
+        Eigen::Vector7d q_dot_;
+        Eigen::Vector7d effort_;
 
         Eigen::Isometry3d x_;
         Eigen::VectorXd x_dot_;
@@ -145,22 +149,31 @@ class PandaController{
 
         torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false).device(torch::kCPU);
         torch::Tensor input_tensor_ = torch::zeros({1, num_seq, num_features*num_joint}, options);
-        Eigen::VectorXd estimated_ext_torque_;
-        Eigen::VectorXd estimated_ext_torque_filtered_;
-        Eigen::VectorXd measured_ext_torque_;
-        Eigen::VectorXd estimated_ext_force_;
-        Eigen::VectorXd estimated_ext_force_pre_;
-        Eigen::VectorXd estimated_ext_force_init_;
-        Eigen::VectorXd measured_ext_force_;
+        at::Tensor lstm_output_;
+        Eigen::Vector7d lstm_output_share_;
 
-        double cur_time_inference_;
-        double pre_time_inference_;
 
         // Force Control
         double f_I_ = 0.0;
         double f_d_x_ = 0.0;
 
-        // Sliding Mode Momentum Observer
+        Eigen::Matrix<double, 6, 7> j_dyn_cons_inv_T_;
+
+        Eigen::VectorXd estimated_ext_torque_LSTM_;
+        Eigen::Vector7d estimated_ext_torque_SOSML_;
+        Eigen::Vector7d estimated_ext_torque_ESO_;
+        Eigen::Vector7d estimated_ext_torque_HOFTO_;
+        Eigen::VectorXd measured_ext_torque_;
+        
+        Eigen::VectorXd estimated_ext_force_;
+        Eigen::VectorXd estimated_ext_force_SOSML_;
+        Eigen::VectorXd estimated_ext_force_ESO_;
+        Eigen::VectorXd estimated_ext_force_HOFTO_;
+        Eigen::VectorXd estimated_ext_force_pre_;
+        Eigen::VectorXd estimated_ext_force_init_;
+        Eigen::VectorXd measured_ext_force_;
+
+        // Second Order Sliding Mode Momentum Observer(SOSML)
         Eigen::Vector7d p_;
         Eigen::Vector7d p_hat_;
         Eigen::Vector7d p_tilde_;
@@ -172,4 +185,28 @@ class PandaController{
 
         Eigen::Matrix7d T1_, T2_;
         Eigen::Matrix7d S1_, S2_;
+
+        // Extended State Observer(ESO)
+        Eigen::Vector7d x1_;
+        Eigen::Vector7d x1_hat_;
+        Eigen::Vector7d x1_tilde_;
+        Eigen::Vector7d x2_hat_;
+        Eigen::Vector7d x3_hat_;
+        
+        double eta1_, eta2_;
+        double epsilon_;
+
+        Eigen::MatrixXd A_ESO_;
+        Eigen::Matrix7d C_ESO_;
+        Eigen::VectorXd g_ESO_;
+
+        // High-Order Finite Time Observer(HOFTO)
+        Eigen::Vector7d z1_, z2_, z3_, z4_;
+        Eigen::Vector7d x1_z1_diff_;
+        Eigen::DiagonalMatrix<double, 7> L1_, L2_, L3_, L4_;
+        Eigen::Vector7d x1_HOFTO_, x2_HOFTO_;
+        double m2_, m3_, m4_, m5_;
+
+        Eigen::MatrixXd A_HOFTO_;
+        Eigen::VectorXd non_linear_HOFTO_;
 };
