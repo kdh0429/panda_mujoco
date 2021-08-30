@@ -21,14 +21,14 @@ int main(int argc, char **argv)
     MujocoInterface mujoco_interface(nh, dc);
     PandaController panda_controller(nh, dc, control_mode);
 
-    std::thread thread[5];
+    std::thread thread[4];
     thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
     thread[1] = std::thread(&PandaController::compute, &panda_controller);
-    thread[2] = std::thread(&PandaController::computeTrainedModel, &panda_controller);
-    thread[3] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
-    thread[4] = std::thread(&PandaController::generateRandTrajThread, &panda_controller);
+    // thread[2] = std::thread(&PandaController::computeTrainedModel, &panda_controller);
+    thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
+    thread[3] = std::thread(&PandaController::generateRandTrajThread, &panda_controller);
 
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 4; i++)
     {
         thread[i].join();
     }

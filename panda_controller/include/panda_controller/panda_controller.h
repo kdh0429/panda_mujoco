@@ -23,6 +23,7 @@
 #include <moveit_visual_tools/moveit_visual_tools.h>
 
 #include <torch/script.h> 
+#include <fstream>
 
 # define MODE_INIT 105
 # define MODE_HOME 104
@@ -43,7 +44,10 @@ class PandaController{
         void setMoveitObstables();
         void generateRandTrajThread();
         void generateRandTraj();
+        void loadNetwork();
         void writeBuffer();
+        void computeBackwardDynamicsModel();
+        void computeForwardDynamicsModel();
         void computeTrainedModel();
         Eigen::Matrix7d getC(Eigen::Vector7d q, Eigen::Vector7d q_dot);
         void computeSOSML();
@@ -133,24 +137,47 @@ class PandaController{
         bool next_traj_prepared_ = false;
 
         // Torch
-        torch::jit::script::Module trained_model_;
-
-        static const int num_seq = 20;
+        static const int num_seq = 5;
         static const int num_features = 2;
         static const int num_joint = 7;
 
         float ring_buffer_[num_seq*num_features*num_joint];
+        float ring_buffer_control_input_[num_seq*num_joint];
         int ring_buffer_idx_ = 0;
 
         float max_theta_ = 3.14;
         float min_theta_ = -3.14;
         float max_theta_dot_ = 0.3;
         float min_theta_dot_ = -0.3;
+        Eigen::Matrix<float, num_joint, 1> output_scaling;
 
-        torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false).device(torch::kCPU);
-        torch::Tensor input_tensor_ = torch::zeros({1, num_seq, num_features*num_joint}, options);
-        at::Tensor lstm_output_;
-        Eigen::Vector7d lstm_output_share_;
+        Eigen::Matrix<float, 100, num_seq*num_features*num_joint> backward_W0;
+        Eigen::Matrix<float, 100, 1> backward_b0;
+        Eigen::Matrix<float, 100, 100> backward_W2;
+        Eigen::Matrix<float, 100, 1> backward_b2;
+        Eigen::Matrix<float, num_joint, 100> backward_W4;
+        Eigen::Matrix<float, num_joint, 1> backward_b4;
+
+        Eigen::Matrix<float, 100, (num_seq-1)*num_features*num_joint + num_joint> forward_W0;
+        Eigen::Matrix<float, 100, 1> forward_b0;
+        Eigen::Matrix<float, 100, 100> forward_W2;
+        Eigen::Matrix<float, 100, 1> forward_b2;
+        Eigen::Matrix<float, num_features*num_joint, 100> forward_W4;
+        Eigen::Matrix<float, num_features*num_joint, 1> forward_b4;
+
+        Eigen::Matrix<float, (num_seq-1)*num_features*num_joint, 1> condition_;
+        Eigen::Matrix<float, num_features*num_joint, 1> state_;
+        Eigen::Matrix<float, num_joint, 1> input_;
+
+        Eigen::Matrix<float, 100, 1> backward_layer1_;
+        Eigen::Matrix<float, 100, 1> backward_layer2_;
+        Eigen::Matrix<float, num_joint, 1> backward_network_output_;
+
+        Eigen::Matrix<float, 100, 1> forward_layer1_;
+        Eigen::Matrix<float, 100, 1> forward_layer2_;
+        Eigen::Matrix<float, num_features*num_joint, 1> forward_network_output_;
+        
+        Eigen::Vector7d network_output_share_;
 
 
         // Force Control
