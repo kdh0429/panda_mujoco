@@ -388,9 +388,11 @@ void PandaController::compute()
                     computeESO();
                     computeHOFTO();
                 }
-                computeControlInput();  
+
                 writeBuffer();
                 computeTrainedModel();
+
+                computeControlInput();  
 
                 printData();
                 
@@ -412,9 +414,7 @@ void PandaController::compute()
                 q_dot_mode_init_ = q_dot_;
                 x_mode_init_ = x_;
 
-                m_ext_.lock();
                 estimated_ext_force_init_ = estimated_ext_force_;
-                m_ext_.unlock();
 
                 std::cout << "Mode Changed to: ";   // i: 105, r: 114, m: 109, s: 115, f:102, h: 104
                 switch(mode_)
@@ -445,9 +445,8 @@ void PandaController::compute()
 
 void PandaController::updateKinematicsDynamics()
 {
-    static const int BODY_ID = robot_.GetBodyId("panda_link8");
+    static const int BODY_ID = robot_.GetBodyId("panda_link7");
 
-    m_rbdl_.lock();
     x_.translation().setZero();
     x_.linear().setZero();
     x_.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), true);
@@ -475,7 +474,6 @@ void PandaController::updateKinematicsDynamics()
     RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_, A_, true);
 
     C_ = getC(q_, q_dot_);
-    m_rbdl_.unlock();
 
     Lambda_ = (j_ * A_.inverse() * j_.transpose()).inverse();
 }
@@ -619,12 +617,12 @@ void PandaController::computeControlInput()
         f_star = kp_task_*x_error +kv_task_*x_dot_error;
 
         // Force control x
-        f_d_x_ = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, estimated_ext_force_init_(0), 10.0, 0.0, 0.0);
+        f_d_x_ = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, estimated_ext_force_init_(0), 40.0, 0.0, 0.0);
         double k_p_force = 0.05;
         double k_v_force = 0.001;
-        m_ext_.lock();
+        
         f_star(0) = k_p_force*(f_d_x_ - estimated_ext_force_(0)) + k_v_force*(estimated_ext_force_(0) - estimated_ext_force_pre_(0))/hz_;
-        m_ext_.unlock();
+        
         estimated_ext_force_pre_ = estimated_ext_force_;
 
         // Eigen::VectorXd F_d;
@@ -636,6 +634,8 @@ void PandaController::computeControlInput()
 
         f_star(0) = 0.0;
         f_I_ = f_I_ + 1.0 * (f_d_x_ - estimated_ext_force_(0)) / hz_;
+        // f_I_ = f_I_ + 1.0 * (f_d_x_ + dc_.force_(0)) / hz_;
+        
 
         Eigen::VectorXd F_d;
         F_d.resize(6);
@@ -660,19 +660,16 @@ void PandaController::writeBuffer()
 {
     if (int(cur_time_*100) != int(pre_time_*100))
     {
-        m_buffer_.lock();
         for (int i = 0; i < dc_.num_dof_; i++)
         {
             ring_buffer_[ring_buffer_idx_*num_features*num_joint + num_features*i] = 2*(q_(i)-min_theta_)/(max_theta_-min_theta_) - 1;
             ring_buffer_[ring_buffer_idx_*num_features*num_joint + num_features*i + 1] = 2*(q_dot_(i)-min_theta_dot_)/(max_theta_dot_-min_theta_dot_) - 1;
-            ring_buffer_control_input_[ring_buffer_idx_*num_joint + i] = control_input_(i);
+            ring_buffer_control_input_[ring_buffer_idx_*num_joint + i] = 2*(control_input_(i)+output_scaling(i))/(output_scaling(i)+output_scaling(i)) - 1;
         }
-
+        
         ring_buffer_idx_++;
         if (ring_buffer_idx_ == num_seq)
             ring_buffer_idx_ = 0;
-
-        m_buffer_.unlock();
     }
 }
 
@@ -707,27 +704,37 @@ void PandaController::logData()
         //     writeFile << control_input_(i) << "\t";
         // }
 
+        int cur_idx = 0;
+        if (ring_buffer_idx_ == 0)
+            cur_idx = num_seq - 1;
+        else
+            cur_idx = ring_buffer_idx_ - 1;
+        
+        for (int i=0; i< dc_.num_dof_; i++)
+        {
+            writeFile << ring_buffer_control_input_[cur_idx*num_joint + i]  << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << network_output_share_(i) << "\t";
+        }
+        
         // for (int i = 0; i < dc_.num_dof_; i++)
         // {
-        //     writeFile << lstm_output_.data()[0][i].item<double>() << "\t";
+        //     writeFile << estimated_ext_torque_LSTM_(i) << "\t";
         // }
-        
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << estimated_ext_torque_LSTM_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << measured_ext_torque_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << estimated_ext_torque_SOSML_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << estimated_ext_torque_ESO_(i) << "\t";
-        }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << measured_ext_torque_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << estimated_ext_torque_SOSML_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << estimated_ext_torque_ESO_(i) << "\t";
+        // }
 
         // writeFile << f_d_x_ << "\t" << estimated_ext_force_(0) << "\t" << measured_ext_force_(0) << "\t" << -dc_.force_(0);
 
@@ -742,9 +749,7 @@ void PandaController::printData()
     ext = (A_*dc_.effort_ + non_linear_) - control_input_;
 
     Eigen::Vector7d lstm_output_copy;
-    m_ext_.lock();
     lstm_output_copy = network_output_share_;
-    m_ext_.unlock();
 
     int cur_idx = 0;
     if (ring_buffer_idx_ == 0)
@@ -755,6 +760,7 @@ void PandaController::printData()
     for (int i= 0; i < dc_.num_dof_; i++)
     {
         estimated_ext_torque_LSTM_(i) = ring_buffer_control_input_[cur_idx*num_joint + i] - lstm_output_copy(i);
+        estimated_ext_torque_LSTM_(i) = estimated_ext_torque_LSTM_(i) * output_scaling(i);
 
         if (i < 4)
         {
@@ -780,6 +786,8 @@ void PandaController::printData()
     estimated_ext_force_ESO_ = j_dyn_cons_inv_T_*estimated_ext_torque_ESO_;
     estimated_ext_force_HOFTO_ = j_dyn_cons_inv_T_*estimated_ext_torque_HOFTO_;
 
+    Eigen::Vector7d reconst_ext_torque = j_.transpose()*estimated_ext_force_;
+
     measured_ext_force_ = j_dyn_cons_inv_T_*measured_ext_torque_;
     
     if (int(cur_time_*10) != int(pre_time_*10))
@@ -794,6 +802,8 @@ void PandaController::printData()
 
         
         std::cout <<"LSTM Ext: " << std::setw(12) << estimated_ext_torque_LSTM_(0) << std::setw(12) << estimated_ext_torque_LSTM_(1) << std::setw(12) << estimated_ext_torque_LSTM_(2) <<std::setw(12)<< estimated_ext_torque_LSTM_(3) << std::setw(12) << estimated_ext_torque_LSTM_(4)<< std::setw(12) << estimated_ext_torque_LSTM_(5) << std::setw(12) << estimated_ext_torque_LSTM_(6) <<std::endl;
+        std::cout <<"Reconstructed LSTM Ext: " << std::setw(12) << reconst_ext_torque(0) << std::setw(12) << reconst_ext_torque(1) << std::setw(12) << reconst_ext_torque(2) <<std::setw(12)<< reconst_ext_torque(3) << std::setw(12) << reconst_ext_torque(4)<< std::setw(12) << reconst_ext_torque(5) << std::setw(12) << reconst_ext_torque(6) <<std::endl;
+
         std::cout <<"SOSML Ext: " << estimated_ext_torque_SOSML_(0) <<std::setw(12)<< estimated_ext_torque_SOSML_(1) << std::setw(12) << estimated_ext_torque_SOSML_(2) << std::setw(12) << estimated_ext_torque_SOSML_(3) << std::setw(12) << estimated_ext_torque_SOSML_(4) << std::setw(12) << estimated_ext_torque_SOSML_(5) << std::setw(12) << estimated_ext_torque_SOSML_(6) <<std::endl;
         std::cout <<"ESO Ext: " << estimated_ext_torque_ESO_(0) <<std::setw(12)<< estimated_ext_torque_ESO_(1) <<std::setw(12)<< estimated_ext_torque_ESO_(2) <<std::setw(12) << estimated_ext_torque_ESO_(3) <<std::setw(12)<< estimated_ext_torque_ESO_(4) <<std::setw(12)<< estimated_ext_torque_ESO_(5) <<std::setw(12)<< estimated_ext_torque_ESO_(6) <<std::endl;
         std::cout <<"HOFTO Ext: " << estimated_ext_torque_HOFTO_(0) <<std::setw(12)<< estimated_ext_torque_HOFTO_(1) <<std::setw(12)<< estimated_ext_torque_HOFTO_(2) <<std::setw(12) << estimated_ext_torque_HOFTO_(3) <<std::setw(12)<< estimated_ext_torque_HOFTO_(4) <<std::setw(12)<< estimated_ext_torque_HOFTO_(5) <<std::setw(12)<< estimated_ext_torque_HOFTO_(6) <<std::endl;
@@ -816,8 +826,8 @@ void PandaController::loadNetwork()
     file[7].open("/home/kim/panda_ws/src/panda_controller/model/forward_network_0_bias.txt", std::ios::in);
     file[8].open("/home/kim/panda_ws/src/panda_controller/model/forward_network_2_weight.txt", std::ios::in);
     file[9].open("/home/kim/panda_ws/src/panda_controller/model/forward_network_2_bias.txt", std::ios::in);
-    file[10].open("/home/kim/panda_ws/src/panda_controller/modelforkward_network_4_weight.txt", std::ios::in);
-    file[11].open("/home/kim/panda_ws/src/panda_controller/modelforkward_network_4_bias.txt", std::ios::in);
+    file[10].open("/home/kim/panda_ws/src/panda_controller/model/forward_network_4_weight.txt", std::ios::in);
+    file[11].open("/home/kim/panda_ws/src/panda_controller/model/forward_network_4_bias.txt", std::ios::in);
 
     if(!file[0].is_open())
     {
@@ -1041,8 +1051,6 @@ void PandaController::computeBackwardDynamicsModel()
     }
 
     backward_network_output_ = backward_W4 * backward_layer2_ + backward_b4;
-    for (int i = 0; i < num_joint; i++)
-        backward_network_output_(i) = backward_network_output_(i) * output_scaling(i);
 } 
 
 void PandaController::computeForwardDynamicsModel()
@@ -1073,18 +1081,17 @@ void PandaController::computeTrainedModel()
     // {
         if (is_init_)
         {
-        int cur_idx = 0;
-        if (ring_buffer_idx_ == 0)
-            cur_idx = num_seq - 1;
-        else
-            cur_idx = ring_buffer_idx_ - 1;
+            int cur_idx = 0;
+            if (ring_buffer_idx_ == 0)
+                cur_idx = num_seq - 1;
+            else
+                cur_idx = ring_buffer_idx_ - 1;
 
-            m_buffer_.lock();
             for (int seq = 0; seq < num_seq-1; seq++)
             {
                 for (int input_feat = 0; input_feat < num_features*num_joint; input_feat++)
                 {
-                    int process_data_idx = cur_idx+seq;
+                    int process_data_idx = cur_idx+seq+1;
                     if (process_data_idx >= num_seq)
                         process_data_idx -= num_seq;
                     condition_(seq*num_features*num_joint + input_feat) = ring_buffer_[process_data_idx*num_features*num_joint + input_feat];
@@ -1094,17 +1101,14 @@ void PandaController::computeTrainedModel()
             {
                 state_(input_feat) = ring_buffer_[cur_idx*num_features*num_joint + input_feat];
             }
-            m_buffer_.unlock();
-
             for (int i = 0; i < num_joint; i++)
-                input_(i) = control_input_(i);
+                input_(i) = 2*(control_input_(i)+output_scaling(i))/(output_scaling(i)+output_scaling(i)) - 1; // ring_buffer_control_input_[cur_idx*num_joint + i];
 
+            computeForwardDynamicsModel();
             computeBackwardDynamicsModel();
-
-            m_ext_.lock();
+            
             for (int i = 0; i < num_joint; i++)
                 network_output_share_(i) = backward_network_output_(i);
-            m_ext_.unlock();
         }
     // }
 }
