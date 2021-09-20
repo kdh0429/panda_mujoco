@@ -26,9 +26,9 @@ int main(int argc, char **argv)
     thread[1] = std::thread(&PandaController::compute, &panda_controller);
     // thread[2] = std::thread(&PandaController::computeTrainedModel, &panda_controller);
     thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
-    thread[3] = std::thread(&PandaController::generateRandTrajThread, &panda_controller);
+    // thread[3] = std::thread(&PandaController::generateRandTrajThread, &panda_controller);
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 3; i++)
     {
         thread[i].join();
     }

@@ -1,6 +1,6 @@
 #include "panda_controller/panda_controller.h"
 
-PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc), move_group_(PLANNING_GROUP)
+PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc)
 {
     if (control_mode == 0)
         dc_.sim_mode_ = "position";
@@ -15,7 +15,7 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     // Moveit
     ros::AsyncSpinner spinner(1);
     spinner.start();
-    initMoveit();
+    // initMoveit();
     
     // Logging
     if (is_write_)
@@ -29,6 +29,8 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
 
     // Keyboard
     init_keyboard();
+
+    init_traj_prepared_ = true;
 }
 
 PandaController::~PandaController()
@@ -38,145 +40,145 @@ PandaController::~PandaController()
 
 void PandaController::initMoveit()
 {
-    const robot_state::JointModelGroup* joint_model_group = move_group_.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-    move_group_.setMaxVelocityScalingFactor(1.0);
+    // const robot_state::JointModelGroup* joint_model_group = move_group_.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
+    // move_group_.setMaxVelocityScalingFactor(1.0);
 
-    namespace rvt = rviz_visual_tools;
-    moveit_visual_tools::MoveItVisualTools visual_tools("panda_link0");
-    visual_tools.deleteAllMarkers();
-    visual_tools.loadRemoteControl();
+    // namespace rvt = rviz_visual_tools;
+    // moveit_visual_tools::MoveItVisualTools visual_tools("panda_link0");
+    // visual_tools.deleteAllMarkers();
+    // visual_tools.loadRemoteControl();
 
-    setMoveitObstables();
+    // setMoveitObstables();
 
-    Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
-    text_pose.translation().z() = 1.75;
-    visual_tools.publishText(text_pose, "MoveGroupInterface Demo", rvt::WHITE, rvt::XLARGE);
-    visual_tools.trigger();
+    // Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
+    // text_pose.translation().z() = 1.75;
+    // visual_tools.publishText(text_pose, "MoveGroupInterface Demo", rvt::WHITE, rvt::XLARGE);
+    // visual_tools.trigger();
 }
 
 void PandaController::setMoveitObstables()
 {
-    // Create collision object
-    std::vector<moveit_msgs::CollisionObject> collision_objects;
+    // // Create collision object
+    // std::vector<moveit_msgs::CollisionObject> collision_objects;
     
-    shape_msgs::SolidPrimitive primitive;
-    primitive.type = primitive.BOX;
-    primitive.dimensions.resize(3);
+    // shape_msgs::SolidPrimitive primitive;
+    // primitive.type = primitive.BOX;
+    // primitive.dimensions.resize(3);
 
-    double square_len = 4.0;
-    double hole_len = 0.22;
-    // Box 1
-    primitive.dimensions[0] = (square_len - hole_len)/2.0;
-    primitive.dimensions[1] = square_len;
-    primitive.dimensions[2] = 0.01;
-    moveit_msgs::CollisionObject box1;
-    box1.header.frame_id = move_group_.getPlanningFrame();
-    box1.id = "box1";
-    geometry_msgs::Pose box1_pose;
-    box1_pose.position.x = (hole_len + primitive.dimensions[0])/2.0;
-    box1_pose.position.y = 0.0;
-    box1_pose.position.z = 0.095;
-    box1.primitives.push_back(primitive);
-    box1.primitive_poses.push_back(box1_pose);
-    box1.operation = box1.ADD;
-    collision_objects.push_back(box1);
+    // double square_len = 4.0;
+    // double hole_len = 0.22;
+    // // Box 1
+    // primitive.dimensions[0] = (square_len - hole_len)/2.0;
+    // primitive.dimensions[1] = square_len;
+    // primitive.dimensions[2] = 0.01;
+    // moveit_msgs::CollisionObject box1;
+    // box1.header.frame_id = move_group_.getPlanningFrame();
+    // box1.id = "box1";
+    // geometry_msgs::Pose box1_pose;
+    // box1_pose.position.x = (hole_len + primitive.dimensions[0])/2.0;
+    // box1_pose.position.y = 0.0;
+    // box1_pose.position.z = 0.095;
+    // box1.primitives.push_back(primitive);
+    // box1.primitive_poses.push_back(box1_pose);
+    // box1.operation = box1.ADD;
+    // collision_objects.push_back(box1);
 
-    // Box 2
-    moveit_msgs::CollisionObject box2;
-    box2.header.frame_id = move_group_.getPlanningFrame();
-    box2.id = "box2";
-    geometry_msgs::Pose box2_pose;
-    box2_pose.position.x = -(hole_len + primitive.dimensions[0])/2.0;
-    box2_pose.position.y = 0.0;
-    box2_pose.position.z = 0.095;
-    box2.primitives.push_back(primitive);
-    box2.primitive_poses.push_back(box2_pose);
-    box2.operation = box2.ADD;
-    collision_objects.push_back(box2);
+    // // Box 2
+    // moveit_msgs::CollisionObject box2;
+    // box2.header.frame_id = move_group_.getPlanningFrame();
+    // box2.id = "box2";
+    // geometry_msgs::Pose box2_pose;
+    // box2_pose.position.x = -(hole_len + primitive.dimensions[0])/2.0;
+    // box2_pose.position.y = 0.0;
+    // box2_pose.position.z = 0.095;
+    // box2.primitives.push_back(primitive);
+    // box2.primitive_poses.push_back(box2_pose);
+    // box2.operation = box2.ADD;
+    // collision_objects.push_back(box2);
 
-    // Box 3
-    primitive.dimensions[0] = hole_len;
-    primitive.dimensions[1] = (square_len - hole_len)/2.0;;
-    moveit_msgs::CollisionObject box3;
-    box3.header.frame_id = move_group_.getPlanningFrame();
-    box3.id = "box3";
-    geometry_msgs::Pose box3_pose;
-    box3_pose.position.x = 0.0;
-    box3_pose.position.y = (primitive.dimensions[1] + hole_len) / 2.0;
-    box3_pose.position.z = 0.095;
-    box3.primitives.push_back(primitive);
-    box3.primitive_poses.push_back(box3_pose);
-    box3.operation = box3.ADD;
-    collision_objects.push_back(box3);
+    // // Box 3
+    // primitive.dimensions[0] = hole_len;
+    // primitive.dimensions[1] = (square_len - hole_len)/2.0;;
+    // moveit_msgs::CollisionObject box3;
+    // box3.header.frame_id = move_group_.getPlanningFrame();
+    // box3.id = "box3";
+    // geometry_msgs::Pose box3_pose;
+    // box3_pose.position.x = 0.0;
+    // box3_pose.position.y = (primitive.dimensions[1] + hole_len) / 2.0;
+    // box3_pose.position.z = 0.095;
+    // box3.primitives.push_back(primitive);
+    // box3.primitive_poses.push_back(box3_pose);
+    // box3.operation = box3.ADD;
+    // collision_objects.push_back(box3);
 
-    // Box 4
-    moveit_msgs::CollisionObject box4;
-    box4.header.frame_id = move_group_.getPlanningFrame();
-    box4.id = "box4";
-    geometry_msgs::Pose box4_pose;
-    box4_pose.position.x = 0.0;
-    box4_pose.position.y = -(primitive.dimensions[1] + hole_len) / 2.0;;
-    box4_pose.position.z = 0.095;
-    box4.primitives.push_back(primitive);
-    box4.primitive_poses.push_back(box4_pose);
-    box4.operation = box4.ADD;
-    collision_objects.push_back(box4);
+    // // Box 4
+    // moveit_msgs::CollisionObject box4;
+    // box4.header.frame_id = move_group_.getPlanningFrame();
+    // box4.id = "box4";
+    // geometry_msgs::Pose box4_pose;
+    // box4_pose.position.x = 0.0;
+    // box4_pose.position.y = -(primitive.dimensions[1] + hole_len) / 2.0;;
+    // box4_pose.position.z = 0.095;
+    // box4.primitives.push_back(primitive);
+    // box4.primitive_poses.push_back(box4_pose);
+    // box4.operation = box4.ADD;
+    // collision_objects.push_back(box4);
 
-    planning_scene_interface_.addCollisionObjects(collision_objects);
+    // planning_scene_interface_.addCollisionObjects(collision_objects);
 }
 
 void PandaController::generateRandTraj()
 {
-    if (!next_traj_prepared_)
-    {
-        moveit::core::RobotState start_state = *(move_group_.getCurrentState());
+    // if (!next_traj_prepared_)
+    // {
+    //     moveit::core::RobotState start_state = *(move_group_.getCurrentState());
 
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            q_init_plan_[i] = q_target_plan_[i];
-            q_dot_plan_[i] = 0.0;
-        }
+    //     for (int i = 0; i < dc_.num_dof_; i++)
+    //     {
+    //         q_init_plan_[i] = q_target_plan_[i];
+    //         q_dot_plan_[i] = 0.0;
+    //     }
 
-        start_state.setJointGroupPositions(PLANNING_GROUP, q_init_plan_);
-        start_state.setJointGroupVelocities(PLANNING_GROUP, q_dot_plan_);
-        move_group_.setStartState(start_state);
+    //     start_state.setJointGroupPositions(PLANNING_GROUP, q_init_plan_);
+    //     start_state.setJointGroupVelocities(PLANNING_GROUP, q_dot_plan_);
+    //     move_group_.setStartState(start_state);
         
-        std::random_device rand_device;
-        std::default_random_engine rand_seed;
-        std::uniform_real_distribution<double> angles[dc_.num_dof_];
-        rand_seed.seed(rand_device());
+    //     std::random_device rand_device;
+    //     std::default_random_engine rand_seed;
+    //     std::uniform_real_distribution<double> angles[dc_.num_dof_];
+    //     rand_seed.seed(rand_device());
 
-        do
-        {
-            double safe_range = 0.0;
-            for (size_t i = 0; i < dc_.num_dof_; i++)
-            {
-                safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
-                angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
-            }
+    //     do
+    //     {
+    //         double safe_range = 0.0;
+    //         for (size_t i = 0; i < dc_.num_dof_; i++)
+    //         {
+    //             safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
+    //             angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
+    //         }
 
-            for (int i = 0; i < dc_.num_dof_; i++) 
-                q_target_plan_[i] = ((angles[i])(rand_seed));
+    //         for (int i = 0; i < dc_.num_dof_; i++) 
+    //             q_target_plan_[i] = ((angles[i])(rand_seed));
 
-            move_group_.setJointValueTarget(q_target_plan_);
-        } 
-        while (move_group_.plan(random_plan_next_) != moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    //         move_group_.setJointValueTarget(q_target_plan_);
+    //     } 
+    //     while (move_group_.plan(random_plan_next_) != moveit::planning_interface::MoveItErrorCode::SUCCESS);
 
-        next_traj_prepared_ = true;
-        std::cout<<"Trajectory prepared"<<std::endl;
-    }
+    //     next_traj_prepared_ = true;
+    //     std::cout<<"Trajectory prepared"<<std::endl;
+    // }
 }
 
 void PandaController::generateRandTrajThread()
 {
-    ros::Rate r(10);
-    while(ros::ok())
-    {
-        generateRandTraj();
-        if (!init_traj_prepared_)
-            init_traj_prepared_ = true;
-        r.sleep();
-    }
+    // ros::Rate r(10);
+    // while(ros::ok())
+    // {
+    //     generateRandTraj();
+    //     if (!init_traj_prepared_)
+    //         init_traj_prepared_ = true;
+    //     r.sleep();
+    // }
 }
 
 void PandaController::compute()
@@ -240,6 +242,7 @@ void PandaController::compute()
 
                 control_input_.resize(dc_.num_dof_);
                 control_input_.setZero();
+                control_input_filtered_.setZero();
 
                 non_linear_.resize(dc_.num_dof_);
                 non_linear_.setZero();
@@ -285,7 +288,7 @@ void PandaController::compute()
                 measured_ext_force_.resize(6);
                 measured_ext_force_.setZero();
 
-                output_scaling << 128.82,84.349,121.16,82.53,11.193,6.2134,6.8168;
+                output_scaling << 124.64, 82.809, 122.57, 81.091, 11.176, 6.7371, 6.8228;
 
                 // Sliding Mode Momentum Observer
                 p_.setZero();
@@ -344,10 +347,10 @@ void PandaController::compute()
                 L3_.diagonal() << 30,30,28.0624,25.9808,25.9808,25.9808,25.9808;
                 L4_.diagonal() << 440,440,385,330,330,330,330;
 
-                L1_.diagonal() = L1_.diagonal()*0.1;
-                L2_.diagonal() = L2_.diagonal()*0.1;
-                L3_.diagonal() = L3_.diagonal()*0.1;
-                L4_.diagonal() = L4_.diagonal()*0.1;
+                L1_.diagonal() = L1_.diagonal()*0.01;
+                L2_.diagonal() = L2_.diagonal()*0.01;
+                L3_.diagonal() = L3_.diagonal()*0.01;
+                L4_.diagonal() = L4_.diagonal()*0.01;
 
                 x1_HOFTO_.setZero();
                 x2_HOFTO_.setZero();
@@ -382,25 +385,24 @@ void PandaController::compute()
                 m_dc_.unlock();
 
                 updateKinematicsDynamics();
-                if (mode_ == MODE_STOP || mode_ == MODE_RANDOM)
-                {
-                    computeSOSML();
-                    computeESO();
-                    computeHOFTO();
-                }
+
+                // computeSOSML();
+                // computeESO();
+                // computeHOFTO();
 
                 writeBuffer();
                 computeTrainedModel();
+                computeExtForce();
+
+                if (is_write_)
+                {
+                    logData(); // When to log data is important
+                }
 
                 computeControlInput();  
 
-                printData();
-                
-                if (is_write_)
-                {
-                    logData();
-                }
-                
+                printData();                
+
                 pre_time_ = cur_time_;
             }
 
@@ -437,7 +439,7 @@ void PandaController::compute()
                 }
             }
         ros::spinOnce();
-        r.sleep();
+        // r.sleep();
         }
     }
     close_keyboard();
@@ -480,60 +482,60 @@ void PandaController::updateKinematicsDynamics()
 
 void PandaController::computeControlInput()
 {
-    if(mode_ == MODE_RANDOM)
-    {
-        if (cur_time_ >= traj_init_time_ + traj_duration_ + 1.0)
-        {   
-            random_plan_ = random_plan_next_;
-            cur_waypoint_ = 0;
-            traj_init_time_ = cur_time_;//ros::Time::now().toSec();
-            total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
-            traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
+    // if(mode_ == MODE_RANDOM)
+    // {
+    //     if (cur_time_ >= traj_init_time_ + traj_duration_ + 1.0)
+    //     {   
+    //         random_plan_ = random_plan_next_;
+    //         cur_waypoint_ = 0;
+    //         traj_init_time_ = cur_time_;//ros::Time::now().toSec();
+    //         total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
+    //         traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
 
-            next_traj_prepared_ = false; 
-            std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
-            std::cout<<"New Trajectory!"<< std::endl;
-            std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
-            std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
-            std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
-            std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
-        }
-        else if (cur_time_ >= traj_init_time_ + traj_duration_)
-        {
-            // Rest
-        }
-        else if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
-        {
-            if (cur_waypoint_ < total_waypoints_-2)
-                cur_waypoint_++;
-        }
+    //         next_traj_prepared_ = false; 
+    //         std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
+    //         std::cout<<"New Trajectory!"<< std::endl;
+    //         std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
+    //         std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
+    //         std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
+    //         std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
+    //     }
+    //     else if (cur_time_ >= traj_init_time_ + traj_duration_)
+    //     {
+    //         // Rest
+    //     }
+    //     else if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
+    //     {
+    //         if (cur_waypoint_ < total_waypoints_-2)
+    //             cur_waypoint_++;
+    //     }
         
-        double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
-        double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
+    //     double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
+    //     double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
 
-        std::vector<Eigen::Vector3d> traj;
-        traj.resize(dc_.num_dof_);
+    //     std::vector<Eigen::Vector3d> traj;
+    //     traj.resize(dc_.num_dof_);
 
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
-            double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
-            double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
-            double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
-            double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
-            double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
+    //     for (int i = 0; i < dc_.num_dof_; i++)
+    //     {
+    //         double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
+    //         double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
+    //         double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
+    //         double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
+    //         double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
+    //         double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
 
-            traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
+    //         traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
 
-            q_desired_(i) = traj[i](0);
-            q_dot_desired_(i) = traj[i](1);
-            q_ddot_desired_(i) = traj[i](2);
-        }
+    //         q_desired_(i) = traj[i](0);
+    //         q_dot_desired_(i) = traj[i](1);
+    //         q_ddot_desired_(i) = traj[i](2);
+    //     }
 
-        control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
-    }
+    //     control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
+    // }
 
-    else if (mode_ == MODE_HOME)
+    if (mode_ == MODE_HOME)
     {
         Eigen::VectorXd q_target;
         q_target.resize(dc_.num_dof_);
@@ -634,7 +636,6 @@ void PandaController::computeControlInput()
 
         f_star(0) = 0.0;
         f_I_ = f_I_ + 1.0 * (f_d_x_ - estimated_ext_force_(0)) / hz_;
-        // f_I_ = f_I_ + 1.0 * (f_d_x_ + dc_.force_(0)) / hz_;
         
 
         Eigen::VectorXd F_d;
@@ -652,6 +653,11 @@ void PandaController::computeControlInput()
     {
         control_input_ = non_linear_;
     }
+
+    for (int i = 0; i < dc_.num_dof_; i++)
+    {
+        control_input_filtered_(i) = lowPassFilter(control_input_(i), control_input_filtered_(i), 1/hz_, 20);
+    }
     
     dc_.control_input_ = control_input_;
 }
@@ -664,7 +670,7 @@ void PandaController::writeBuffer()
         {
             ring_buffer_[ring_buffer_idx_*num_features*num_joint + num_features*i] = 2*(q_(i)-min_theta_)/(max_theta_-min_theta_) - 1;
             ring_buffer_[ring_buffer_idx_*num_features*num_joint + num_features*i + 1] = 2*(q_dot_(i)-min_theta_dot_)/(max_theta_dot_-min_theta_dot_) - 1;
-            ring_buffer_control_input_[ring_buffer_idx_*num_joint + i] = 2*(control_input_(i)+output_scaling(i))/(output_scaling(i)+output_scaling(i)) - 1;
+            ring_buffer_control_input_[ring_buffer_idx_*num_joint + i] = 2*(control_input_filtered_(i)+output_scaling(i))/(output_scaling(i)+output_scaling(i)) - 1;
         }
         
         ring_buffer_idx_++;
@@ -679,45 +685,45 @@ void PandaController::logData()
     {
         writeFile << cur_time_ << "\t";
 
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_dot_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_desired_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_dot_desired_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << q_ddot_desired_(i) << "\t";
-        // }
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << control_input_(i) << "\t";
-        // }
-
-        int cur_idx = 0;
-        if (ring_buffer_idx_ == 0)
-            cur_idx = num_seq - 1;
-        else
-            cur_idx = ring_buffer_idx_ - 1;
-        
-        for (int i=0; i< dc_.num_dof_; i++)
+        for (int i = 0; i < dc_.num_dof_; i++)
         {
-            writeFile << ring_buffer_control_input_[cur_idx*num_joint + i]  << "\t";
+            writeFile << q_(i) << "\t";
         }
         for (int i = 0; i < dc_.num_dof_; i++)
         {
-            writeFile << network_output_share_(i) << "\t";
+            writeFile << q_dot_(i) << "\t";
         }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_dot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << q_ddot_desired_(i) << "\t";
+        }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << control_input_filtered_(i) << "\t";
+        }
+
+        // int cur_idx = 0;
+        // if (ring_buffer_idx_ == 0)
+        //     cur_idx = num_seq - 1;
+        // else
+        //     cur_idx = ring_buffer_idx_ - 1;
+        
+        // for (int i=0; i< dc_.num_dof_; i++)
+        // {
+        //     writeFile << ring_buffer_control_input_[cur_idx*num_joint + i]  << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << network_output_share_(i) << "\t";
+        // }
         
         // for (int i = 0; i < dc_.num_dof_; i++)
         // {
@@ -738,11 +744,24 @@ void PandaController::logData()
 
         // writeFile << f_d_x_ << "\t" << estimated_ext_force_(0) << "\t" << measured_ext_force_(0) << "\t" << -dc_.force_(0);
 
+        // for (int i = 0; i < 3; i++)
+        // {
+        //     writeFile << measured_ext_force_(i) << "\t";
+        // }
+        // for (int i = 0; i < 3; i++)
+        // {
+        //     writeFile << estimated_ext_force_(i) << "\t";
+        // }
+        // for (int i = 0; i < 3; i++)
+        // {
+        //     writeFile << estimated_ext_force_SOSML_(i) << "\t";
+        // }
+
         writeFile << "\n";
     }
 }
 
-void PandaController::printData()
+void PandaController::computeExtForce()
 {
     Eigen::Matrix<double, 7, 1> ext;
     ext.setZero();
@@ -778,7 +797,9 @@ void PandaController::printData()
         }
     }
     
-    j_dyn_cons_inv_T_ = (j_*A_.inverse()*j_.transpose()).inverse() * j_ * A_.inverse();
+    Eigen::Matrix<double, 6,6> I;
+    I.setIdentity();
+    j_dyn_cons_inv_T_ = (j_*A_.inverse()*j_.transpose() + 0.001*I).inverse() * j_ * A_.inverse();
 
     estimated_ext_force_ = j_dyn_cons_inv_T_*estimated_ext_torque_LSTM_;
 
@@ -786,28 +807,29 @@ void PandaController::printData()
     estimated_ext_force_ESO_ = j_dyn_cons_inv_T_*estimated_ext_torque_ESO_;
     estimated_ext_force_HOFTO_ = j_dyn_cons_inv_T_*estimated_ext_torque_HOFTO_;
 
-    Eigen::Vector7d reconst_ext_torque = j_.transpose()*estimated_ext_force_;
-
     measured_ext_force_ = j_dyn_cons_inv_T_*measured_ext_torque_;
-    
+}
+
+void PandaController::printData()
+{ 
     if (int(cur_time_*10) != int(pre_time_*10))
     {
         std::cout <<"FT Measured Force: " << dc_.force_(0) <<std::setw(12)<< dc_.force_(1) <<std::setw(12)<< dc_.force_(2) <<std::endl;
         std::cout <<"Dynamics Measured Force: " << measured_ext_force_(0) <<std::setw(12)<< measured_ext_force_(1) <<std::setw(12)<< measured_ext_force_(2) <<std::endl << std::endl;
 
-        std::cout <<"Estimated Force LSTM: " << estimated_ext_force_(0) <<std::setw(12)<< estimated_ext_force_(1) <<std::setw(12)<< estimated_ext_force_(2) <<std::endl;
+        std::cout <<"Estimated Force LSTM: " << estimated_ext_force_(0) <<std::setw(12)<< estimated_ext_force_(1) <<std::setw(12)<< estimated_ext_force_(2) <<std::setw(12)<< estimated_ext_force_(3) <<std::setw(12)<< estimated_ext_force_(4) <<std::setw(12)<< estimated_ext_force_(5) <<std::endl;
         std::cout <<"Estimated Force SOSML: " << estimated_ext_force_SOSML_(0) <<std::setw(12)<< estimated_ext_force_SOSML_(1) <<std::setw(12)<< estimated_ext_force_SOSML_(2) <<std::endl;
         std::cout <<"Estimated Force ESO: " << estimated_ext_force_ESO_(0) <<std::setw(12)<< estimated_ext_force_ESO_(1) <<std::setw(12)<< estimated_ext_force_ESO_(2) <<std::endl;
         std::cout <<"Estimated Force HOFTO: " << estimated_ext_force_HOFTO_(0) <<std::setw(12)<< estimated_ext_force_HOFTO_(1) <<std::setw(12)<< estimated_ext_force_HOFTO_(2) <<std::endl << std::endl;
 
-        
+        std::cout <<"Dynamics Measured Ext: " << std::setw(12) << measured_ext_torque_(0) << std::setw(12) << measured_ext_torque_(1) << std::setw(12) << measured_ext_torque_(2) <<std::setw(12)<< measured_ext_torque_(3) << std::setw(12) << measured_ext_torque_(4)<< std::setw(12) << measured_ext_torque_(5) << std::setw(12) << measured_ext_torque_(6) <<std::endl;
         std::cout <<"LSTM Ext: " << std::setw(12) << estimated_ext_torque_LSTM_(0) << std::setw(12) << estimated_ext_torque_LSTM_(1) << std::setw(12) << estimated_ext_torque_LSTM_(2) <<std::setw(12)<< estimated_ext_torque_LSTM_(3) << std::setw(12) << estimated_ext_torque_LSTM_(4)<< std::setw(12) << estimated_ext_torque_LSTM_(5) << std::setw(12) << estimated_ext_torque_LSTM_(6) <<std::endl;
-        std::cout <<"Reconstructed LSTM Ext: " << std::setw(12) << reconst_ext_torque(0) << std::setw(12) << reconst_ext_torque(1) << std::setw(12) << reconst_ext_torque(2) <<std::setw(12)<< reconst_ext_torque(3) << std::setw(12) << reconst_ext_torque(4)<< std::setw(12) << reconst_ext_torque(5) << std::setw(12) << reconst_ext_torque(6) <<std::endl;
-
         std::cout <<"SOSML Ext: " << estimated_ext_torque_SOSML_(0) <<std::setw(12)<< estimated_ext_torque_SOSML_(1) << std::setw(12) << estimated_ext_torque_SOSML_(2) << std::setw(12) << estimated_ext_torque_SOSML_(3) << std::setw(12) << estimated_ext_torque_SOSML_(4) << std::setw(12) << estimated_ext_torque_SOSML_(5) << std::setw(12) << estimated_ext_torque_SOSML_(6) <<std::endl;
         std::cout <<"ESO Ext: " << estimated_ext_torque_ESO_(0) <<std::setw(12)<< estimated_ext_torque_ESO_(1) <<std::setw(12)<< estimated_ext_torque_ESO_(2) <<std::setw(12) << estimated_ext_torque_ESO_(3) <<std::setw(12)<< estimated_ext_torque_ESO_(4) <<std::setw(12)<< estimated_ext_torque_ESO_(5) <<std::setw(12)<< estimated_ext_torque_ESO_(6) <<std::endl;
         std::cout <<"HOFTO Ext: " << estimated_ext_torque_HOFTO_(0) <<std::setw(12)<< estimated_ext_torque_HOFTO_(1) <<std::setw(12)<< estimated_ext_torque_HOFTO_(2) <<std::setw(12) << estimated_ext_torque_HOFTO_(3) <<std::setw(12)<< estimated_ext_torque_HOFTO_(4) <<std::setw(12)<< estimated_ext_torque_HOFTO_(5) <<std::setw(12)<< estimated_ext_torque_HOFTO_(6) <<std::endl;
         
+
+                std::cout<<"dt: " << cur_time_ - pre_time_ << std::endl;
 
         std::cout << std::endl;
     }
@@ -1037,14 +1059,14 @@ void PandaController::computeBackwardDynamicsModel()
     backNetInput << condition_, state_;
     
     backward_layer1_ = backward_W0 * backNetInput + backward_b0;
-    for (int i = 0; i < 100; i++) 
+    for (int i = 0; i < num_hidden_neurons_; i++) 
     {
         if (backward_layer1_(i) < 0)
             backward_layer1_(i) = 0.0;
     }
 
     backward_layer2_ = backward_W2 * backward_layer1_ + backward_b2;
-    for (int i = 0; i < 100; i++) 
+    for (int i = 0; i < num_hidden_neurons_; i++) 
     {
         if (backward_layer2_(i) < 0)
             backward_layer2_(i) = 0.0;
@@ -1059,14 +1081,14 @@ void PandaController::computeForwardDynamicsModel()
     forwardNetInput << condition_, input_;
     
     forward_layer1_ = forward_W0 * forwardNetInput + forward_b0;
-    for (int i = 0; i < 100; i++) 
+    for (int i = 0; i < num_hidden_neurons_; i++) 
     {
         if (forward_layer1_(i) < 0)
             forward_layer1_(i) = 0.0;
     }
 
     forward_layer2_ = forward_W2 * forward_layer1_ + forward_b2;
-    for (int i = 0; i < 100; i++) 
+    for (int i = 0; i < num_hidden_neurons_; i++) 
     {
         if (forward_layer2_(i) < 0)
             forward_layer2_(i) = 0.0;
@@ -1104,7 +1126,7 @@ void PandaController::computeTrainedModel()
             for (int i = 0; i < num_joint; i++)
                 input_(i) = 2*(control_input_(i)+output_scaling(i))/(output_scaling(i)+output_scaling(i)) - 1; // ring_buffer_control_input_[cur_idx*num_joint + i];
 
-            computeForwardDynamicsModel();
+            // computeForwardDynamicsModel();
             computeBackwardDynamicsModel();
             
             for (int i = 0; i < num_joint; i++)
@@ -1229,5 +1251,5 @@ void PandaController::computeHOFTO()
     z3_ = z3_ + (z4_ + L3_*pow_m4)/hz_;
     z4_ = z4_ + (L4_*pow_m5)/hz_;
 
-    estimated_ext_torque_HOFTO_ = -A_HOFTO_ * z4_;
+    estimated_ext_torque_HOFTO_ = -A_HOFTO_ * z3_;
 }

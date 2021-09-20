@@ -355,6 +355,7 @@ bool reset_request = false;
 bool pause_check = true;
 
 bool pub_total_mode = false;
+std::string robot_type = "master";
 
 bool use_shm = false;
 

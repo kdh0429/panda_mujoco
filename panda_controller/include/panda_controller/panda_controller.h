@@ -49,13 +49,14 @@ class PandaController{
         void computeBackwardDynamicsModel();
         void computeForwardDynamicsModel();
         void computeTrainedModel();
+        void computeExtForce();
         Eigen::Matrix7d getC(Eigen::Vector7d q, Eigen::Vector7d q_dot);
         void computeSOSML();
         void computeESO();
         void computeHOFTO();
 
     private:
-        double hz_ = 1000;
+        double hz_ = 2000;
         double cur_time_;
         double pre_time_;
         double init_time_;
@@ -78,7 +79,7 @@ class PandaController{
 
         double sim_time_ = 0.0;
 
-        bool is_write_ = true;
+        bool is_write_ = false;
         std::ofstream writeFile;
 
         // Robot State
@@ -105,6 +106,7 @@ class PandaController{
         Eigen::MatrixXd kv_task_, kp_task_;
 
         Eigen::VectorXd control_input_;
+        Eigen::Vector7d control_input_filtered_;
 
         // Kinematics & Dynamics
         RigidBodyDynamics::Model robot_;
@@ -115,11 +117,11 @@ class PandaController{
         Eigen::MatrixXd Lambda_;
 
         // Moveit
-        inline static const std::string PLANNING_GROUP="panda_arm";
-        moveit::planning_interface::MoveGroupInterface move_group_;
-        moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
-        moveit::planning_interface::MoveGroupInterface::Plan random_plan_;
-        moveit::planning_interface::MoveGroupInterface::Plan random_plan_next_;
+        // inline static const std::string PLANNING_GROUP="panda_arm";
+        // moveit::planning_interface::MoveGroupInterface move_group_;
+        // moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
+        // moveit::planning_interface::MoveGroupInterface::Plan random_plan_;
+        // moveit::planning_interface::MoveGroupInterface::Plan random_plan_next_;
 
         std::vector<double> q_target_plan_;
         std::vector<double> q_init_plan_; 
@@ -151,30 +153,32 @@ class PandaController{
         float min_theta_dot_ = -0.3;
         Eigen::Matrix<float, num_joint, 1> output_scaling;
 
-        Eigen::Matrix<float, 100, num_seq*num_features*num_joint> backward_W0;
-        Eigen::Matrix<float, 100, 1> backward_b0;
-        Eigen::Matrix<float, 100, 100> backward_W2;
-        Eigen::Matrix<float, 100, 1> backward_b2;
-        Eigen::Matrix<float, num_joint, 100> backward_W4;
+        static const int num_hidden_neurons_ = 200;
+
+        Eigen::Matrix<float, num_hidden_neurons_, num_seq*num_features*num_joint> backward_W0;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> backward_b0;
+        Eigen::Matrix<float, num_hidden_neurons_, num_hidden_neurons_> backward_W2;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> backward_b2;
+        Eigen::Matrix<float, num_joint, num_hidden_neurons_> backward_W4;
         Eigen::Matrix<float, num_joint, 1> backward_b4;
 
-        Eigen::Matrix<float, 100, (num_seq-1)*num_features*num_joint + num_joint> forward_W0;
-        Eigen::Matrix<float, 100, 1> forward_b0;
-        Eigen::Matrix<float, 100, 100> forward_W2;
-        Eigen::Matrix<float, 100, 1> forward_b2;
-        Eigen::Matrix<float, num_features*num_joint, 100> forward_W4;
+        Eigen::Matrix<float, num_hidden_neurons_, (num_seq-1)*num_features*num_joint + num_joint> forward_W0;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> forward_b0;
+        Eigen::Matrix<float, num_hidden_neurons_, num_hidden_neurons_> forward_W2;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> forward_b2;
+        Eigen::Matrix<float, num_features*num_joint, num_hidden_neurons_> forward_W4;
         Eigen::Matrix<float, num_features*num_joint, 1> forward_b4;
 
         Eigen::Matrix<float, (num_seq-1)*num_features*num_joint, 1> condition_;
         Eigen::Matrix<float, num_features*num_joint, 1> state_;
         Eigen::Matrix<float, num_joint, 1> input_;
 
-        Eigen::Matrix<float, 100, 1> backward_layer1_;
-        Eigen::Matrix<float, 100, 1> backward_layer2_;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> backward_layer1_;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> backward_layer2_;
         Eigen::Matrix<float, num_joint, 1> backward_network_output_;
 
-        Eigen::Matrix<float, 100, 1> forward_layer1_;
-        Eigen::Matrix<float, 100, 1> forward_layer2_;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> forward_layer1_;
+        Eigen::Matrix<float, num_hidden_neurons_, 1> forward_layer2_;
         Eigen::Matrix<float, num_features*num_joint, 1> forward_network_output_;
         
         Eigen::Vector7d network_output_share_;

@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <termios.h>
+
+#define EIGEN_STACK_ALLOCATION_LIMIT 0
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <Eigen/Geometry>
