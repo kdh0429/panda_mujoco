@@ -6,7 +6,7 @@ SlavePandaController::SlavePandaController(ros::NodeHandle &nh, DataContainer &d
         dc_.sim_mode_ = "position";
     else if (control_mode == 1)
         dc_.sim_mode_ = "torque";
-    // master_state_sub_ = nh.subscribe("/mujoco_ros_interface/master/sim_status", 1, &SlavePandaController::masterStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
+    master_state_sub_ = nh.subscribe("/mujoco_ros_interface/master/sim_status", 1, &SlavePandaController::masterStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
 
     // RBDL
     urdf_name_ = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";

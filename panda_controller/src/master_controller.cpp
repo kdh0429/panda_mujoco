@@ -277,7 +277,7 @@ void MasterPandaController::compute()
                 }
             }
         ros::spinOnce();
-        // r.sleep();
+        r.sleep();
         }
     }
     close_keyboard();
