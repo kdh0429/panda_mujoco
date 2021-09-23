@@ -131,23 +131,40 @@ int main(int argc, char **argv)
     {        
         nh.param("pub_mode", pub_total_mode, false);
         
-        
         //register publisher & subscriber
-        joint_set = nh.subscribe<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/joint_set", 1, jointset_callback, ros::TransportHints().tcpNoDelay(true));
+        if (ros::this_node::getNamespace() == "/master")
+        {
+            joint_set = nh.subscribe<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/master/joint_set", 1, jointset_callback, ros::TransportHints().tcpNoDelay(true));
+            //with pub_mode param false, simulation states(joint states, sensor states, simulation time ... ) are published with each own publisher.
+            //But if pub_mode param is set to True, all simulation states are going to be published by one topic, so that only one callback function from controller will be triggered.
+            if (pub_total_mode)
+            {
+                sim_status_pub = nh.advertise<mujoco_ros_msgs::SimStatus>("/mujoco_ros_interface/master/sim_status", 1);
+            }
+            else
+            {
+                joint_state_pub = nh.advertise<sensor_msgs::JointState>("/mujoco_ros_interface/master/joint_states", 1);
+                sim_time_pub = nh.advertise<std_msgs::Float32>("/mujoco_ros_interface/master/sim_time", 1);
+                sensor_state_pub = nh.advertise<mujoco_ros_msgs::SensorState>("/mujoco_ros_interface/master/sensor_states", 1);
+            }
+        }
+        else if (ros::this_node::getNamespace() == "/slave")
+        {
+            joint_set = nh.subscribe<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/slave/joint_set", 1, jointset_callback, ros::TransportHints().tcpNoDelay(true));
+            if (pub_total_mode)
+            {
+                sim_status_pub = nh.advertise<mujoco_ros_msgs::SimStatus>("/mujoco_ros_interface/slave/sim_status", 1);
+            }
+            else
+            {
+                joint_state_pub = nh.advertise<sensor_msgs::JointState>("/mujoco_ros_interface/slave/joint_states", 1);
+                sim_time_pub = nh.advertise<std_msgs::Float32>("/mujoco_ros_interface/slave/sim_time", 1);
+                sensor_state_pub = nh.advertise<mujoco_ros_msgs::SensorState>("/mujoco_ros_interface/slave/sensor_states", 1);
+            }
+        }
         //joint_set_mujoco = nh.subscribe<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/joint_set_mujoco",1,joint)
 
-        //with pub_mode param false, simulation states(joint states, sensor states, simulation time ... ) are published with each own publisher.
-        //But if pub_mode param is set to True, all simulation states are going to be published by one topic, so that only one callback function from controller will be triggered.
-        if (pub_total_mode)
-        {
-            sim_status_pub = nh.advertise<mujoco_ros_msgs::SimStatus>("/mujoco_ros_interface/sim_status", 1);
-        }
-        else
-        {
-            joint_state_pub = nh.advertise<sensor_msgs::JointState>("/mujoco_ros_interface/joint_states", 1);
-            sim_time_pub = nh.advertise<std_msgs::Float32>("/mujoco_ros_interface/sim_time", 1);
-            sensor_state_pub = nh.advertise<mujoco_ros_msgs::SensorState>("/mujoco_ros_interface/sensor_states", 1);
-        }
+
     }
     else
     {

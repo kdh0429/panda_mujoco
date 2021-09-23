@@ -15,35 +15,20 @@
 #include <rbdl/rbdl.h>
 #include <rbdl/addons/urdfreader/urdfreader.h>
 
-#include <moveit/move_group_interface/move_group_interface.h>
-#include <moveit/planning_scene_interface/planning_scene_interface.h>
-#include <moveit_msgs/DisplayRobotState.h>
-#include <moveit_msgs/DisplayTrajectory.h>
-#include <moveit_msgs/CollisionObject.h>
-#include <moveit_visual_tools/moveit_visual_tools.h>
-
 #include <torch/script.h> 
 #include <fstream>
 
-# define MODE_INIT 105
-# define MODE_HOME 104
-# define MODE_RANDOM 114
-# define MODE_FORCE 102
-# define MODE_STOP 115
 
-class PandaController{
+class SlavePandaController{
     public:
-        PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode);
-        ~PandaController();
+        SlavePandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode);
+        ~SlavePandaController();
+        void masterStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr &msg);
         void compute();
         void updateKinematicsDynamics();
         void computeControlInput();
         void logData();
         void printData();
-        void initMoveit();
-        void setMoveitObstables();
-        void generateRandTrajThread();
-        void generateRandTraj();
         void loadNetwork();
         void writeBuffer();
         void computeBackwardDynamicsModel();
@@ -56,6 +41,7 @@ class PandaController{
         void computeHOFTO();
 
     private:
+        ros::Subscriber master_state_sub_;
         double hz_ = 2000;
         double cur_time_;
         double pre_time_;
@@ -115,28 +101,6 @@ class PandaController{
         Eigen::MatrixXd C_;
         
         Eigen::MatrixXd Lambda_;
-
-        // Moveit
-        inline static const std::string PLANNING_GROUP="panda_arm";
-        moveit::planning_interface::MoveGroupInterface move_group_;
-        moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
-        moveit::planning_interface::MoveGroupInterface::Plan random_plan_;
-        moveit::planning_interface::MoveGroupInterface::Plan random_plan_next_;
-
-        std::vector<double> q_target_plan_;
-        std::vector<double> q_init_plan_; 
-        std::vector<double> q_dot_plan_;
-
-        Eigen::VectorXd q_limit_u_;
-        Eigen::VectorXd q_limit_l_;
-
-        double traj_init_time_ = 0.0;
-        double traj_duration_ = 0.0;
-        int total_waypoints_;
-        int cur_waypoint_ = 0;
-
-        bool init_traj_prepared_ = false;
-        bool next_traj_prepared_ = false;
 
         // Torch
         static const int num_seq = 5;

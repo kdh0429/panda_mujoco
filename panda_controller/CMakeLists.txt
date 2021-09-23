@@ -31,7 +31,8 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 add_library(panda_controller_lib
-  src/controller.cpp
+  src/master_controller.cpp
+  src/slave_controller.cpp
   src/mujoco_interface.cpp
 )
 add_executable(panda_controller src/main.cpp)

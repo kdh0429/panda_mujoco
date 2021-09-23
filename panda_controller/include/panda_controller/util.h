@@ -1,3 +1,6 @@
+#ifndef Util_H
+#define Util_H
+
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -15,8 +18,9 @@
 static struct termios initial_settings, new_settings;
  
 static int peek_character = -1;
- 
-void init_keyboard()
+
+
+inline void init_keyboard()
 {
     tcgetattr(0,&initial_settings);
     new_settings = initial_settings;
@@ -27,12 +31,12 @@ void init_keyboard()
     tcsetattr(0, TCSANOW, &new_settings);
 }
  
-void close_keyboard()
+inline void close_keyboard()
 {
     tcsetattr(0, TCSANOW, &initial_settings);
 }
  
-int _kbhit()
+inline int _kbhit()
 {
     unsigned char ch;
     int nread;
@@ -52,7 +56,7 @@ int _kbhit()
     return 0;
 }
  
-int _getch()
+inline int _getch()
 {
     char ch;
  
@@ -66,7 +70,7 @@ int _getch()
     return ch;
 }
  
-int _putch(int c) {
+inline int _putch(int c) {
     putchar(c);
     fflush(stdout);
     return c;
@@ -86,7 +90,7 @@ namespace Eigen
 
 } // namespace Eigen
 
-Eigen::Vector3d quintic_spline(
+inline Eigen::Vector3d quintic_spline(
     double time,       // Current time
     double time_0,     // Start time
     double time_f,     // End time
@@ -141,7 +145,7 @@ Eigen::Vector3d quintic_spline(
     return result;
 }
 
-static double cubic(double time,    ///< Current time
+static inline double cubic(double time,    ///< Current time
                       double time_0,  ///< Start time
                       double time_f,  ///< End time
                       double x_0,     ///< Start state
@@ -180,7 +184,7 @@ static double cubic(double time,    ///< Current time
     return x_t;
   }
 
-  static double cubicDot(double time,    ///< Current time
+static inline double cubicDot(double time,    ///< Current time
                          double time_0,  ///< Start time
                          double time_f,  ///< End time
                          double x_0,     ///< Start state
@@ -217,7 +221,7 @@ static double cubic(double time,    ///< Current time
     return x_t;
 }
 
-static Eigen::Vector3d getPhi(Eigen::Matrix3d current_rotation,
+static inline Eigen::Vector3d getPhi(Eigen::Matrix3d current_rotation,
                             Eigen::Matrix3d desired_rotation)
 {
 Eigen::Vector3d phi;
@@ -235,7 +239,7 @@ phi = -0.5 * phi;
 return phi;
 }
 
-const static Eigen::Matrix3d rotationCubic(double time,
+const static inline Eigen::Matrix3d rotationCubic(double time,
     double time_0,
     double time_f,
     const Eigen::Matrix3d &rotation_0,
@@ -258,7 +262,7 @@ const static Eigen::Matrix3d rotationCubic(double time,
     return result;
 }
 
-const static Eigen::Vector3d rotationCubicDot(double time,
+const static inline Eigen::Vector3d rotationCubicDot(double time,
     double time_0,
     double time_f,
     const Eigen::Matrix3d &rotation_0, const Eigen::Matrix3d &rotation_f)
@@ -286,8 +290,9 @@ const static Eigen::Vector3d rotationCubicDot(double time,
     return result;
 }
 
-  static inline double lowPassFilter(double input, double prev, double dt, double cut_off_frequency)
-  {
+static inline double lowPassFilter(double input, double prev, double dt, double cut_off_frequency)
+{
     double alpha = (2*3.1415*dt*cut_off_frequency) / (2*3.1415*dt*cut_off_frequency + 1);
     return alpha*input + (1-alpha)*prev;
-  }
+}
+#endif

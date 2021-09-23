@@ -4,7 +4,8 @@
 
 #include <thread>
 
-#include "panda_controller/panda_controller.h"
+#include "panda_controller/slave_panda_controller.h"
+#include "panda_controller/master_panda_controller.h"
 #include "panda_controller/mujoco_interface.h"
 
 #define TorqueControl 1
@@ -19,16 +20,35 @@ int main(int argc, char **argv)
     int control_mode = PositionControl;
 
     MujocoInterface mujoco_interface(nh, dc);
-    PandaController panda_controller(nh, dc, control_mode);
 
-    std::thread thread[4];
-    thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
-    thread[1] = std::thread(&PandaController::compute, &panda_controller);
-    // thread[2] = std::thread(&PandaController::computeTrainedModel, &panda_controller);
-    thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
-    thread[3] = std::thread(&PandaController::generateRandTrajThread, &panda_controller);
+    std::thread thread[5];
+    int num_thread = 0;
 
-    for (int i = 0; i < 3; i++)
+    std::cout << "Robot Type: " << ros::this_node::getNamespace() << std::endl;
+    if (ros::this_node::getNamespace() == "/master")
+    {
+        MasterPandaController panda_controller(nh, dc, control_mode);
+        thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
+        thread[1] = std::thread(&MasterPandaController::compute, &panda_controller);
+        thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
+        num_thread = 3;
+        std::cout << "Master Ready" << std::endl;
+    }
+    else if (ros::this_node::getNamespace() == "/slave")
+    {
+        SlavePandaController panda_controller(nh, dc, control_mode);
+        thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
+        thread[1] = std::thread(&SlavePandaController::compute, &panda_controller);
+        // thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
+        num_thread = 2;
+        std::cout<< "Slave Ready" << std::endl;
+    }
+    else
+    {
+        std::cout << "No Type" << std::endl;
+    }
+
+    for (int i = 0; i < num_thread; i++)
     {
         thread[i].join();
     }
