@@ -6,12 +6,12 @@ SlavePandaController::SlavePandaController(ros::NodeHandle &nh, DataContainer &d
         dc_.sim_mode_ = "position";
     else if (control_mode == 1)
         dc_.sim_mode_ = "torque";
-    master_state_sub_ = nh.subscribe("/mujoco_ros_interface/master/sim_status", 1, &SlavePandaController::masterStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
+    // master_state_sub_ = nh.subscribe("/mujoco_ros_interface/master/sim_status", 1, &SlavePandaController::masterStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
 
     // RBDL
-    std::string urdf_name = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
-    std::cout<<"Model name: " << urdf_name <<std::endl;
-    RigidBodyDynamics::Addons::URDFReadFromFile(urdf_name.c_str(), &robot_, false, false);
+    urdf_name_ = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
+    std::cout<<"Model name: " << urdf_name_ <<std::endl;
+    RigidBodyDynamics::Addons::URDFReadFromFile(urdf_name_.c_str(), &robot_, false, false);
     
     // Logging
     if (is_write_)
@@ -22,6 +22,8 @@ SlavePandaController::SlavePandaController(ros::NodeHandle &nh, DataContainer &d
     
     // Torch
     loadNetwork();
+
+    ros::Duration(2.0).sleep();
 }
 
 SlavePandaController::~SlavePandaController()
@@ -47,7 +49,6 @@ void SlavePandaController::compute()
     ros::Rate r(hz_);
     while(ros::ok())
     {
-        std::cout <<"checkcompute"<<std::endl;
         if (!dc_.is_first_callback)
         {
             if (!is_init_)
@@ -106,7 +107,6 @@ void SlavePandaController::compute()
                 control_input_filtered_.setZero();
 
                 non_linear_.resize(dc_.num_dof_);
-                non_linear_.setZero();
                 A_.resize(dc_.num_dof_, dc_.num_dof_);
                 A_.setZero();
                 C_.resize(dc_.num_dof_, dc_.num_dof_);
@@ -263,42 +263,34 @@ void SlavePandaController::compute()
 void SlavePandaController::updateKinematicsDynamics()
 {
     static const int BODY_ID = robot_.GetBodyId("panda_link7");
-std::cout<<"CHECK0" <<std::endl;
     x_.translation().setZero();
     x_.linear().setZero();
 
-std::cout<<"CHECK0-0" <<std::endl;
-Eigen::Vector7d zeros; zeros.setZero();
-    x_.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), false);
+    x_.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), true);
+    x_.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(robot_, q_, BODY_ID, true).transpose();
+    
+    j_temp_.setZero();
+    RigidBodyDynamics::CalcPointJacobian6D(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), j_temp_, true);
 
-std::cout<<"CHECK0-1" <<std::endl;
-    x_.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(robot_, q_, BODY_ID, false).transpose();
-// std::cout<<"CHECK1" <<std::endl;
-//     j_temp_.setZero();
-//     RigidBodyDynamics::CalcPointJacobian6D(robot_, q_, BODY_ID, Eigen::Vector3d(0.0, 0.0, 0.0), j_temp_, true);
-
-//     std::cout<<"CHECK1-2" <<std::endl;
-//     j_.setZero();
-//     for (int i = 0; i<2; i++)
-// 	{
-// 		j_.block<3, 7>(i * 3, 0) = j_temp_.block<3, 7>(3 - i * 3, 0);
-// 	}    
-    std::cout<<"CHECK2" <<std::endl;
-    // x_dot_ = j_ * q_dot_;
+    j_.setZero();
+    for (int i = 0; i<2; i++)
+	{
+		j_.block<3, 7>(i * 3, 0) = j_temp_.block<3, 7>(3 - i * 3, 0);
+	}    
+    x_dot_ = j_ * q_dot_;
 
     non_linear_.setZero();
     RigidBodyDynamics::NonlinearEffects(robot_, q_, q_dot_, non_linear_);
-std::cout<<"CHECK3" <<std::endl;
+
     g_.setZero();
     Eigen::Vector7d q_dot_zero;
     q_dot_zero.setZero();
     RigidBodyDynamics::NonlinearEffects(robot_, q_, q_dot_zero, g_);
-    std::cout<<"CHECK4" <<std::endl;
+
     A_.setZero();
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_, A_, false);
-std::cout<<"CHECK5" <<std::endl;
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_, A_, true);
     C_ = getC(q_, q_dot_);
-    // Lambda_ = (j_ * A_.inverse() * j_.transpose()).inverse();
+    Lambda_ = (j_ * A_.inverse() * j_.transpose()).inverse();
 }
 
 void SlavePandaController::computeControlInput()
@@ -811,8 +803,8 @@ Eigen::Matrix7d SlavePandaController::getC(Eigen::Vector7d q, Eigen::Vector7d q_
         A.setZero();
         A_new.setZero();
 
-        RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q, A, false);
-        RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_new, A_new, false);
+        RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q, A, true);
+        RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, q_new, A_new, true);
 
         m[i].resize(dc_.num_dof_, dc_.num_dof_);
         m[i] = (A_new - A) / h;
@@ -866,7 +858,7 @@ void SlavePandaController::computeESO()
     x1_tilde_ = x1_ - x1_hat_;
 
     A_ESO_.setZero();
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, x1_hat_, A_ESO_, false);
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, x1_hat_, A_ESO_, true);
     Eigen::Vector7d q_dot_zero;
     q_dot_zero.setZero();
     RigidBodyDynamics::NonlinearEffects(robot_, x1_hat_, q_dot_zero, g_ESO_);
@@ -884,7 +876,7 @@ void SlavePandaController::computeHOFTO()
     x1_HOFTO_ = q_;
     x2_HOFTO_ = q_dot_;
 
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, x1_HOFTO_, A_HOFTO_, false);
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(robot_, x1_HOFTO_, A_HOFTO_, true);
     RigidBodyDynamics::NonlinearEffects(robot_, x1_HOFTO_, x2_HOFTO_, non_linear_HOFTO_);
 
     x1_z1_diff_ = x1_HOFTO_ - z1_;

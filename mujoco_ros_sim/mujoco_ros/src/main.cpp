@@ -100,6 +100,7 @@ void loadmodel(void)
     {
         char title[200] = "Simulate : ";
         strcat(title, m->names);
+        strcat(title, ros::this_node::getNamespace().c_str());
         glfwSetWindowTitle(window, title);
     }
 

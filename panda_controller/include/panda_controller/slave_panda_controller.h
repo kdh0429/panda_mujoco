@@ -95,8 +95,9 @@ class SlavePandaController{
         Eigen::Vector7d control_input_filtered_;
 
         // Kinematics & Dynamics
+        std::string urdf_name_;
         RigidBodyDynamics::Model robot_;
-        Eigen::VectorXd non_linear_;
+        RigidBodyDynamics::Math::VectorNd non_linear_;
         Eigen::MatrixXd A_;
         Eigen::MatrixXd C_;
         

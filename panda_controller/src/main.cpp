@@ -11,42 +11,39 @@
 #define TorqueControl 1
 #define PositionControl 0
 
+#define Master true
+#define Slave false
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "panda_controller");
-    ros::NodeHandle nh;
-    DataContainer dc;
+    ros::NodeHandle nh_master;
+    ros::NodeHandle nh_slave;
+
+    DataContainer dc_master;
+    DataContainer dc_slave;
 
     int control_mode = PositionControl;
 
-    MujocoInterface mujoco_interface(nh, dc);
+    MujocoInterface mujoco_interface_master(nh_master, dc_master, Master);
+    MujocoInterface mujoco_interface_slave(nh_slave, dc_slave, Slave);
 
-    std::thread thread[5];
+    std::thread thread[6];
     int num_thread = 0;
 
-    std::cout << "Robot Type: " << ros::this_node::getNamespace() << std::endl;
-    if (ros::this_node::getNamespace() == "/master")
-    {
-        MasterPandaController panda_controller(nh, dc, control_mode);
-        thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
-        thread[1] = std::thread(&MasterPandaController::compute, &panda_controller);
-        thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
-        num_thread = 3;
-        std::cout << "Master Ready" << std::endl;
-    }
-    else if (ros::this_node::getNamespace() == "/slave")
-    {
-        SlavePandaController panda_controller(nh, dc, control_mode);
-        thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
-        thread[1] = std::thread(&SlavePandaController::compute, &panda_controller);
-        // thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
-        num_thread = 2;
-        std::cout<< "Slave Ready" << std::endl;
-    }
-    else
-    {
-        std::cout << "No Type" << std::endl;
-    }
+
+    MasterPandaController panda_controller_master(nh_master, dc_master, control_mode);
+    thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface_master);
+    thread[1] = std::thread(&MasterPandaController::compute, &panda_controller_master);
+    thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface_master, control_mode);
+    num_thread += 3;
+
+    SlavePandaController panda_controller_slave(nh_slave, dc_slave, control_mode);
+    thread[3] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface_slave);
+    thread[4] = std::thread(&SlavePandaController::compute, &panda_controller_slave);
+    thread[5] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface_slave, control_mode);
+    num_thread += 3;
+        
 
     for (int i = 0; i < num_thread; i++)
     {

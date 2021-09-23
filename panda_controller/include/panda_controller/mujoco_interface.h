@@ -8,7 +8,7 @@
 class MujocoInterface
 {
     public:
-        MujocoInterface(ros::NodeHandle &nh, DataContainer &dc);
+        MujocoInterface(ros::NodeHandle &nh, DataContainer &dc, bool is_master);
         ~MujocoInterface();
         void stateUpdate();
         void simStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr &msg);
