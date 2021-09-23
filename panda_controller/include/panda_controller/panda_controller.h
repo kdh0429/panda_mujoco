@@ -117,11 +117,11 @@ class PandaController{
         Eigen::MatrixXd Lambda_;
 
         // Moveit
-        // inline static const std::string PLANNING_GROUP="panda_arm";
-        // moveit::planning_interface::MoveGroupInterface move_group_;
-        // moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
-        // moveit::planning_interface::MoveGroupInterface::Plan random_plan_;
-        // moveit::planning_interface::MoveGroupInterface::Plan random_plan_next_;
+        inline static const std::string PLANNING_GROUP="panda_arm";
+        moveit::planning_interface::MoveGroupInterface move_group_;
+        moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
+        moveit::planning_interface::MoveGroupInterface::Plan random_plan_;
+        moveit::planning_interface::MoveGroupInterface::Plan random_plan_next_;
 
         std::vector<double> q_target_plan_;
         std::vector<double> q_init_plan_; 

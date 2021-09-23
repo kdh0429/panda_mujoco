@@ -2,17 +2,8 @@
 
 MujocoInterface::MujocoInterface(ros::NodeHandle &nh, DataContainer &dc): dc_(dc)
 {
-    std::string robot_type = ros::this_node::getNamespace();
-    if (robot_type == "/master")
-    {
-        mujoco_sim_status_sub_ = nh.subscribe("/mujoco_ros_interface/master/sim_status", 1, &MujocoInterface::simStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
-        mujoco_joint_set_pub_ = nh.advertise<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/master/joint_set", 100);
-    }
-    else
-    {       
-        mujoco_sim_status_sub_ = nh.subscribe("/mujoco_ros_interface/slave/sim_status", 1, &MujocoInterface::simStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
-        mujoco_joint_set_pub_ = nh.advertise<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/slave/joint_set", 100);
-    }
+    mujoco_sim_status_sub_ = nh.subscribe("/mujoco_ros_interface/sim_status", 1, &MujocoInterface::simStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
+    mujoco_joint_set_pub_ = nh.advertise<mujoco_ros_msgs::JointSet>("/mujoco_ros_interface/joint_set", 100);
 }
 
 MujocoInterface::~MujocoInterface()

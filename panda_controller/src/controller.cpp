@@ -1,6 +1,6 @@
 #include "panda_controller/panda_controller.h"
 
-PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc)
+PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc), move_group_(PLANNING_GROUP)
 {
     if (control_mode == 0)
         dc_.sim_mode_ = "position";
@@ -15,7 +15,7 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     // Moveit
     ros::AsyncSpinner spinner(1);
     spinner.start();
-    // initMoveit();
+    initMoveit();
     
     // Logging
     if (is_write_)
@@ -40,145 +40,145 @@ PandaController::~PandaController()
 
 void PandaController::initMoveit()
 {
-    // const robot_state::JointModelGroup* joint_model_group = move_group_.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-    // move_group_.setMaxVelocityScalingFactor(1.0);
+    const robot_state::JointModelGroup* joint_model_group = move_group_.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
+    move_group_.setMaxVelocityScalingFactor(1.0);
 
-    // namespace rvt = rviz_visual_tools;
-    // moveit_visual_tools::MoveItVisualTools visual_tools("panda_link0");
-    // visual_tools.deleteAllMarkers();
-    // visual_tools.loadRemoteControl();
+    namespace rvt = rviz_visual_tools;
+    moveit_visual_tools::MoveItVisualTools visual_tools("panda_link0");
+    visual_tools.deleteAllMarkers();
+    visual_tools.loadRemoteControl();
 
-    // setMoveitObstables();
+    setMoveitObstables();
 
-    // Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
-    // text_pose.translation().z() = 1.75;
-    // visual_tools.publishText(text_pose, "MoveGroupInterface Demo", rvt::WHITE, rvt::XLARGE);
-    // visual_tools.trigger();
+    Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
+    text_pose.translation().z() = 1.75;
+    visual_tools.publishText(text_pose, "MoveGroupInterface Demo", rvt::WHITE, rvt::XLARGE);
+    visual_tools.trigger();
 }
 
 void PandaController::setMoveitObstables()
 {
-    // // Create collision object
-    // std::vector<moveit_msgs::CollisionObject> collision_objects;
+    // Create collision object
+    std::vector<moveit_msgs::CollisionObject> collision_objects;
     
-    // shape_msgs::SolidPrimitive primitive;
-    // primitive.type = primitive.BOX;
-    // primitive.dimensions.resize(3);
+    shape_msgs::SolidPrimitive primitive;
+    primitive.type = primitive.BOX;
+    primitive.dimensions.resize(3);
 
-    // double square_len = 4.0;
-    // double hole_len = 0.22;
-    // // Box 1
-    // primitive.dimensions[0] = (square_len - hole_len)/2.0;
-    // primitive.dimensions[1] = square_len;
-    // primitive.dimensions[2] = 0.01;
-    // moveit_msgs::CollisionObject box1;
-    // box1.header.frame_id = move_group_.getPlanningFrame();
-    // box1.id = "box1";
-    // geometry_msgs::Pose box1_pose;
-    // box1_pose.position.x = (hole_len + primitive.dimensions[0])/2.0;
-    // box1_pose.position.y = 0.0;
-    // box1_pose.position.z = 0.095;
-    // box1.primitives.push_back(primitive);
-    // box1.primitive_poses.push_back(box1_pose);
-    // box1.operation = box1.ADD;
-    // collision_objects.push_back(box1);
+    double square_len = 4.0;
+    double hole_len = 0.22;
+    // Box 1
+    primitive.dimensions[0] = (square_len - hole_len)/2.0;
+    primitive.dimensions[1] = square_len;
+    primitive.dimensions[2] = 0.01;
+    moveit_msgs::CollisionObject box1;
+    box1.header.frame_id = move_group_.getPlanningFrame();
+    box1.id = "box1";
+    geometry_msgs::Pose box1_pose;
+    box1_pose.position.x = (hole_len + primitive.dimensions[0])/2.0;
+    box1_pose.position.y = 0.0;
+    box1_pose.position.z = 0.095;
+    box1.primitives.push_back(primitive);
+    box1.primitive_poses.push_back(box1_pose);
+    box1.operation = box1.ADD;
+    collision_objects.push_back(box1);
 
-    // // Box 2
-    // moveit_msgs::CollisionObject box2;
-    // box2.header.frame_id = move_group_.getPlanningFrame();
-    // box2.id = "box2";
-    // geometry_msgs::Pose box2_pose;
-    // box2_pose.position.x = -(hole_len + primitive.dimensions[0])/2.0;
-    // box2_pose.position.y = 0.0;
-    // box2_pose.position.z = 0.095;
-    // box2.primitives.push_back(primitive);
-    // box2.primitive_poses.push_back(box2_pose);
-    // box2.operation = box2.ADD;
-    // collision_objects.push_back(box2);
+    // Box 2
+    moveit_msgs::CollisionObject box2;
+    box2.header.frame_id = move_group_.getPlanningFrame();
+    box2.id = "box2";
+    geometry_msgs::Pose box2_pose;
+    box2_pose.position.x = -(hole_len + primitive.dimensions[0])/2.0;
+    box2_pose.position.y = 0.0;
+    box2_pose.position.z = 0.095;
+    box2.primitives.push_back(primitive);
+    box2.primitive_poses.push_back(box2_pose);
+    box2.operation = box2.ADD;
+    collision_objects.push_back(box2);
 
-    // // Box 3
-    // primitive.dimensions[0] = hole_len;
-    // primitive.dimensions[1] = (square_len - hole_len)/2.0;;
-    // moveit_msgs::CollisionObject box3;
-    // box3.header.frame_id = move_group_.getPlanningFrame();
-    // box3.id = "box3";
-    // geometry_msgs::Pose box3_pose;
-    // box3_pose.position.x = 0.0;
-    // box3_pose.position.y = (primitive.dimensions[1] + hole_len) / 2.0;
-    // box3_pose.position.z = 0.095;
-    // box3.primitives.push_back(primitive);
-    // box3.primitive_poses.push_back(box3_pose);
-    // box3.operation = box3.ADD;
-    // collision_objects.push_back(box3);
+    // Box 3
+    primitive.dimensions[0] = hole_len;
+    primitive.dimensions[1] = (square_len - hole_len)/2.0;;
+    moveit_msgs::CollisionObject box3;
+    box3.header.frame_id = move_group_.getPlanningFrame();
+    box3.id = "box3";
+    geometry_msgs::Pose box3_pose;
+    box3_pose.position.x = 0.0;
+    box3_pose.position.y = (primitive.dimensions[1] + hole_len) / 2.0;
+    box3_pose.position.z = 0.095;
+    box3.primitives.push_back(primitive);
+    box3.primitive_poses.push_back(box3_pose);
+    box3.operation = box3.ADD;
+    collision_objects.push_back(box3);
 
-    // // Box 4
-    // moveit_msgs::CollisionObject box4;
-    // box4.header.frame_id = move_group_.getPlanningFrame();
-    // box4.id = "box4";
-    // geometry_msgs::Pose box4_pose;
-    // box4_pose.position.x = 0.0;
-    // box4_pose.position.y = -(primitive.dimensions[1] + hole_len) / 2.0;;
-    // box4_pose.position.z = 0.095;
-    // box4.primitives.push_back(primitive);
-    // box4.primitive_poses.push_back(box4_pose);
-    // box4.operation = box4.ADD;
-    // collision_objects.push_back(box4);
+    // Box 4
+    moveit_msgs::CollisionObject box4;
+    box4.header.frame_id = move_group_.getPlanningFrame();
+    box4.id = "box4";
+    geometry_msgs::Pose box4_pose;
+    box4_pose.position.x = 0.0;
+    box4_pose.position.y = -(primitive.dimensions[1] + hole_len) / 2.0;;
+    box4_pose.position.z = 0.095;
+    box4.primitives.push_back(primitive);
+    box4.primitive_poses.push_back(box4_pose);
+    box4.operation = box4.ADD;
+    collision_objects.push_back(box4);
 
-    // planning_scene_interface_.addCollisionObjects(collision_objects);
+    planning_scene_interface_.addCollisionObjects(collision_objects);
 }
 
 void PandaController::generateRandTraj()
 {
-    // if (!next_traj_prepared_)
-    // {
-    //     moveit::core::RobotState start_state = *(move_group_.getCurrentState());
+    if (!next_traj_prepared_)
+    {
+        moveit::core::RobotState start_state = *(move_group_.getCurrentState());
 
-    //     for (int i = 0; i < dc_.num_dof_; i++)
-    //     {
-    //         q_init_plan_[i] = q_target_plan_[i];
-    //         q_dot_plan_[i] = 0.0;
-    //     }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            q_init_plan_[i] = q_target_plan_[i];
+            q_dot_plan_[i] = 0.0;
+        }
 
-    //     start_state.setJointGroupPositions(PLANNING_GROUP, q_init_plan_);
-    //     start_state.setJointGroupVelocities(PLANNING_GROUP, q_dot_plan_);
-    //     move_group_.setStartState(start_state);
+        start_state.setJointGroupPositions(PLANNING_GROUP, q_init_plan_);
+        start_state.setJointGroupVelocities(PLANNING_GROUP, q_dot_plan_);
+        move_group_.setStartState(start_state);
         
-    //     std::random_device rand_device;
-    //     std::default_random_engine rand_seed;
-    //     std::uniform_real_distribution<double> angles[dc_.num_dof_];
-    //     rand_seed.seed(rand_device());
+        std::random_device rand_device;
+        std::default_random_engine rand_seed;
+        std::uniform_real_distribution<double> angles[dc_.num_dof_];
+        rand_seed.seed(rand_device());
 
-    //     do
-    //     {
-    //         double safe_range = 0.0;
-    //         for (size_t i = 0; i < dc_.num_dof_; i++)
-    //         {
-    //             safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
-    //             angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
-    //         }
+        do
+        {
+            double safe_range = 0.0;
+            for (size_t i = 0; i < dc_.num_dof_; i++)
+            {
+                safe_range = ((q_limit_u_[i] - q_limit_l_[i]) * 0.1);
+                angles[i] = std::uniform_real_distribution<double>((q_limit_l_[i] + safe_range), (q_limit_u_[i] - safe_range));
+            }
 
-    //         for (int i = 0; i < dc_.num_dof_; i++) 
-    //             q_target_plan_[i] = ((angles[i])(rand_seed));
+            for (int i = 0; i < dc_.num_dof_; i++) 
+                q_target_plan_[i] = ((angles[i])(rand_seed));
 
-    //         move_group_.setJointValueTarget(q_target_plan_);
-    //     } 
-    //     while (move_group_.plan(random_plan_next_) != moveit::planning_interface::MoveItErrorCode::SUCCESS);
+            move_group_.setJointValueTarget(q_target_plan_);
+        } 
+        while (move_group_.plan(random_plan_next_) != moveit::planning_interface::MoveItErrorCode::SUCCESS);
 
-    //     next_traj_prepared_ = true;
-    //     std::cout<<"Trajectory prepared"<<std::endl;
-    // }
+        next_traj_prepared_ = true;
+        std::cout<<"Trajectory prepared"<<std::endl;
+    }
 }
 
 void PandaController::generateRandTrajThread()
 {
-    // ros::Rate r(10);
-    // while(ros::ok())
-    // {
-    //     generateRandTraj();
-    //     if (!init_traj_prepared_)
-    //         init_traj_prepared_ = true;
-    //     r.sleep();
-    // }
+    ros::Rate r(10);
+    while(ros::ok())
+    {
+        generateRandTraj();
+        if (!init_traj_prepared_)
+            init_traj_prepared_ = true;
+        r.sleep();
+    }
 }
 
 void PandaController::compute()
