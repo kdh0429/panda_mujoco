@@ -2,20 +2,18 @@
 
 MasterPandaController::MasterPandaController(ros::NodeHandle &nh, DataContainer &dc, int control_mode) : dc_(dc)
 {
-
-std::cout <<"check0"<<std::endl;
     if (control_mode == 0)
         dc_.sim_mode_ = "position";
     else if (control_mode == 1)
         dc_.sim_mode_ = "torque";
 
-std::cout <<"check1"<<std::endl;
+    slave_force_sub_ = nh.subscribe("/slave/force", 1, &MasterPandaController::slaveForceCallback, this, ros::TransportHints().tcpNoDelay(true));
+
     // RBDL
     std::string urdf_name = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
     std::cout<<"Model name: " << urdf_name <<std::endl;
     RigidBodyDynamics::Addons::URDFReadFromFile(urdf_name.c_str(), &robot_, false, false);
 
-std::cout <<"check2"<<std::endl;
     // Logging
     if (is_write_)
     {
@@ -33,6 +31,14 @@ std::cout <<"check2"<<std::endl;
 MasterPandaController::~MasterPandaController()
 {
 
+}
+
+void MasterPandaController::slaveForceCallback(const std_msgs::Float64MultiArray::ConstPtr& msg)
+{
+    for(int i = 0; i <6; i++)
+    {
+        estimated_ext_force_(i) = msg->data[i];
+    }
 }
 
 void MasterPandaController::compute()
@@ -233,7 +239,7 @@ void MasterPandaController::compute()
 
                 writeBuffer();
                 computeTrainedModel();
-                computeExtForce();
+                // computeExtForce();
 
                 if (is_write_)
                 {
@@ -242,7 +248,7 @@ void MasterPandaController::compute()
 
                 computeControlInput();  
 
-                printData();                
+                // printData();                
 
                 pre_time_ = cur_time_;
             }
@@ -405,30 +411,34 @@ void MasterPandaController::computeControlInput()
 
         // Force control x
         f_d_x_ = cubic(cur_time_, mode_init_time_, mode_init_time_+traj_duration, estimated_ext_force_init_(0), 40.0, 0.0, 0.0);
-        double k_p_force = 0.05;
-        double k_v_force = 0.001;
+        
+        double k_p_force = 0.001;
+        double k_v_force = 0.0001;
         
         f_star(0) = k_p_force*(f_d_x_ - estimated_ext_force_(0)) + k_v_force*(estimated_ext_force_(0) - estimated_ext_force_pre_(0))/hz_;
         
         estimated_ext_force_pre_ = estimated_ext_force_;
 
-        // Eigen::VectorXd F_d;
-        // F_d.resize(6);
-        // F_d.setZero();
-        // F_d(0) = f_d_x_;
-
-        // control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
-
-        f_star(0) = 0.0;
+        double f_d_ = 0.5*(f_d_x_ - estimated_ext_force_(0));
         f_I_ = f_I_ + 1.0 * (f_d_x_ - estimated_ext_force_(0)) / hz_;
-        
 
         Eigen::VectorXd F_d;
         F_d.resize(6);
         F_d.setZero();
-        F_d(0) = f_d_x_ + f_I_;
-        
+        F_d(0) = f_d_x_ + f_d_ + f_I_;
+
         control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
+
+        // f_star(0) = 0.0;
+        // f_I_ = f_I_ + 1.0 * (f_d_x_ - estimated_ext_force_(0)) / hz_;
+        
+
+        // Eigen::VectorXd F_d;
+        // F_d.resize(6);
+        // F_d.setZero();
+        // F_d(0) = f_d_x_ + f_I_;
+        
+        // control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
     }
     else if (mode_ == MODE_STOP)
     {

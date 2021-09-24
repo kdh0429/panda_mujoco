@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <ros/console.h>
 #include <ros/package.h>
+#include "std_msgs/Float64MultiArray.h"
 
 #include "panda_controller/util.h"
 
@@ -42,6 +43,9 @@ class SlavePandaController{
 
     private:
         ros::Subscriber master_state_sub_;
+        ros::Publisher slave_force_pub_;
+        std_msgs::Float64MultiArray force_msg_;
+        
         double hz_ = 2000;
         double cur_time_;
         double pre_time_;

@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <ros/console.h>
 #include <ros/package.h>
+#include "std_msgs/Float64MultiArray.h"
 
 #include "panda_controller/util.h"
 
@@ -54,8 +55,10 @@ class MasterPandaController{
         void computeSOSML();
         void computeESO();
         void computeHOFTO();
+        void slaveForceCallback(const std_msgs::Float64MultiArray::ConstPtr& msg);
 
     private:
+        ros::Subscriber slave_force_sub_;
         double hz_ = 2000;
         double cur_time_;
         double pre_time_;

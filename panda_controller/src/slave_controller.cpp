@@ -6,7 +6,9 @@ SlavePandaController::SlavePandaController(ros::NodeHandle &nh, DataContainer &d
         dc_.sim_mode_ = "position";
     else if (control_mode == 1)
         dc_.sim_mode_ = "torque";
+
     master_state_sub_ = nh.subscribe("/mujoco_ros_interface/master/sim_status", 1, &SlavePandaController::masterStatusCallback, this, ros::TransportHints().tcpNoDelay(true));
+    slave_force_pub_ = nh.advertise<std_msgs::Float64MultiArray>("/slave/force", 100);
 
     // RBDL
     urdf_name_ = ros::package::getPath("panda_description") + "/robots/panda_arm.urdf";
@@ -22,8 +24,6 @@ SlavePandaController::SlavePandaController(ros::NodeHandle &nh, DataContainer &d
     
     // Torch
     loadNetwork();
-
-    ros::Duration(2.0).sleep();
 }
 
 SlavePandaController::~SlavePandaController()
@@ -53,7 +53,6 @@ void SlavePandaController::compute()
         {
             if (!is_init_)
             {
-                 std::cout <<"First Callback"<<std::endl;
                 // Robot State
                 q_.setZero();
                 q_dot_.setZero();
@@ -215,6 +214,8 @@ void SlavePandaController::compute()
                 non_linear_HOFTO_.setZero();
 
                 estimated_ext_torque_HOFTO_.setZero();
+
+                force_msg_.data.resize(6);
 
                 init_time_ = ros::Time::now().toSec();
 
@@ -452,6 +453,12 @@ void SlavePandaController::computeExtForce()
     estimated_ext_force_HOFTO_ = j_dyn_cons_inv_T_*estimated_ext_torque_HOFTO_;
 
     measured_ext_force_ = j_dyn_cons_inv_T_*measured_ext_torque_;
+
+    for (int i = 0; i <6; i++)
+    {
+        force_msg_.data[i] = estimated_ext_force_(i);
+    }
+    slave_force_pub_.publish(force_msg_);
 }
 
 void SlavePandaController::printData()

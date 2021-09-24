@@ -15,7 +15,7 @@
 
   <node name="mujoco_ros" pkg="mujoco_ros" type="mujoco_ros" required="true" respawn="false" ns="slave" output="screen">
     <param name="license" type="string" value="$(env HOME)/mjkey.txt" />
-    <param name="model_file" type="string" value="$(find panda_description)/franka_panda_arm.xml"/>
+    <param name="model_file" type="string" value="$(find panda_description)/franka_panda_arm_with_wall.xml"/>
     <param name="pub_mode" value="$(arg pub_mode)"/>
   </node>
 
