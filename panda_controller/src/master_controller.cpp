@@ -35,9 +35,19 @@ MasterPandaController::~MasterPandaController()
 
 void MasterPandaController::slaveForceCallback(const std_msgs::Float64MultiArray::ConstPtr& msg)
 {
-    for(int i = 0; i <6; i++)
+    if (mode_ == MODE_FORCE)
     {
-        estimated_ext_force_(i) = msg->data[i];
+        for(int i = 0; i <6; i++)
+        {
+            estimated_ext_force_(i) = msg->data[i];
+        }
+    }
+    else if(mode_ == MODE_MASTER)
+    {
+        for(int i = 0; i <6; i++)
+        {
+            f_d_(i) = msg->data[i];
+        }
     }
 }
 
@@ -239,7 +249,8 @@ void MasterPandaController::compute()
 
                 writeBuffer();
                 computeTrainedModel();
-                // computeExtForce();
+                if (mode_ != MODE_FORCE)
+                    computeExtForce();
 
                 if (is_write_)
                 {
@@ -276,6 +287,9 @@ void MasterPandaController::compute()
                         break;
                     case(102):
                         std::cout << "Force Control" << std::endl;
+                        break;
+                    case(109):
+                        std::cout << "Master Control" << std::endl;
                         break;
                     case(115):
                         std::cout << "Stop" << std::endl;
@@ -346,7 +360,7 @@ void MasterPandaController::computeControlInput()
 
     else if (mode_ == MODE_INIT)
     {
-        x_target_.translation() << 0.3, 0.0, 0.8;
+        x_target_.translation() << 0.2, 0.0, 0.8;
         x_target_.linear() << 0.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0;
 
         double traj_duration = 5.0;
@@ -439,6 +453,10 @@ void MasterPandaController::computeControlInput()
         // F_d(0) = f_d_x_ + f_I_;
         
         // control_input_ = j_.transpose()*(Lambda_*f_star + F_d) + non_linear_;
+    }
+    else if (mode_ == MODE_MASTER)
+    {
+        control_input_ = j_.transpose()*(-f_d_) + non_linear_;
     }
     else if (mode_ == MODE_STOP)
     {

@@ -13,14 +13,12 @@
 
     <worldbody>
         <body name="table" pos="0.61 0.0 0.6" zaxis="0 0 1">
-            <geom size="0.2 4.0 0.6" type="box" />
-            <!-- <site name="FT" pos="0 0 0"/> -->
+            <!-- <freejoint/> -->
+            <geom size="0.2 4.0 0.6" type="box" mass="0.5"/>
         </body>
-
-
         <include file="assets/chain0_nogripper.xml"/>
-    </worldbody>
 
+    </worldbody>
     <include file='assets/actuator0_nogripper.xml'/>
 
 </mujoco>

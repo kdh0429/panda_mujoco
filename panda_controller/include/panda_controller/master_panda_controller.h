@@ -30,6 +30,7 @@
 # define MODE_HOME 104
 # define MODE_RANDOM 114
 # define MODE_FORCE 102
+# define MODE_MASTER 109
 # define MODE_STOP 115
 
 class MasterPandaController{
@@ -197,6 +198,8 @@ class MasterPandaController{
 
         Eigen::Matrix7d T1_, T2_;
         Eigen::Matrix7d S1_, S2_;
+
+        Eigen::Vector6d f_d_;
 
         // Extended State Observer(ESO)
         Eigen::Vector7d x1_;
