@@ -456,7 +456,13 @@ void MasterPandaController::computeControlInput()
     }
     else if (mode_ == MODE_MASTER)
     {
-        control_input_ = j_.transpose()*(-f_d_) + non_linear_;
+        if (estimated_ext_force_.norm() <= 1.0)
+            estimated_ext_force_.setZero();
+        if (estimated_ext_torque_LSTM_.norm() <= 1.0)
+            estimated_ext_torque_LSTM_.setZero();
+
+        // control_input_ = j_.transpose()*(-f_d_ - estimated_ext_force_) + non_linear_;
+        control_input_ = j_.transpose()*(-f_d_) - estimated_ext_torque_LSTM_ + non_linear_;
     }
     else if (mode_ == MODE_STOP)
     {
