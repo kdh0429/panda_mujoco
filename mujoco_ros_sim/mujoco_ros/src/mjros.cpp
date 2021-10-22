@@ -283,11 +283,9 @@ void state_publisher()
             {
                 joint_state_msg_.position[i] = d->qpos[i];
                 joint_state_msg_.velocity[i] = d->qvel[i];
-                // joint_state_msg_.effort[i] = d->qfrc_inverse[i]-d->qfrc_applied[i]-d->qfrc_actuator[i];
                 joint_state_msg_.effort[i] = d->qacc[i];
             }
         }
-        // std::cout << "External: " << joint_state_msg_.effort[0] << std::endl;
 
         for (int i = 0; i < m->nsensor; i++)
         {
@@ -489,11 +487,7 @@ void mycontroller(const mjModel *m, mjData *d)
             }
             else
             {
-                // memcpy(ctrl_command, &command[0], m->nu * sizeof(float));
-                for (int i = 0; i < m->nu; i++)
-                {
-                   ctrl_command[i] = command[i];
-                }
+                std::copy(command.begin(), command.end(), ctrl_command);
             }
             // for (int i = 0; i < m->nu; i++)
             // {
@@ -518,6 +512,7 @@ void mycontroller(const mjModel *m, mjData *d)
                     mju_copy(d->xfrc_applied, ctrl_command2, m->nbody * 6);
                 }
             }
+
             ROS_INFO_COND(settings.debug == 1, "MJ_TIME:%10.5f ros:%10.5f dif:%10.5f", d->time, ros_sim_runtime.toSec(), d->time - ros_sim_runtime.toSec());
             ROS_INFO_COND(settings.debug == 1, "TEST FOR THERE ");
 
@@ -2164,7 +2159,7 @@ void simulate(void)
 //-------------------------------- init and main ----------------------------------------
 
 // initalize everything
-void init(std::string key_file)
+void init()
 {
     // print version, check compatibility
     printf("MuJoCo Pro version %.2lf\n", 0.01 * mj_version());
@@ -2173,7 +2168,7 @@ void init(std::string key_file)
 
     // activate MuJoCo license
     //ROS_INFO("license file located at %s", key_file.c_str());
-    mj_activate(key_file.c_str());
+    // mj_activate(key_file.c_str());
 
     // init GLFW, set timer callback (milliseconds)
     if (!glfwInit())
