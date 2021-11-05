@@ -6,7 +6,7 @@
   <arg name="run_mode" default="simulation"/>
   <arg name="pub_mode" default="true"/>
   <arg name="urdfDampingmodel" default="false"/>
-
+  
   <node name="mujoco_ros" pkg="mujoco_ros" type="mujoco_ros" required="true" respawn="false" ns="master" output="screen">
     <param name="license" type="string" value="$(env HOME)/mjkey.txt" />
     <param name="model_file" type="string" value="$(find panda_description)/franka_panda_arm.xml"/>
