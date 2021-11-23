@@ -20,7 +20,7 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     // Logging
     if (is_write_)
     {
-        writeFile.open("/home/kim/ssd2/data.csv", std::ofstream::out | std::ofstream::app);
+        writeFile.open("/home/kim/ssd2/residualData.csv", std::ofstream::out | std::ofstream::app);
         writeFile << std::fixed << std::setprecision(8);
     }
 
@@ -29,7 +29,6 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
 
     // Ros
     resi_publisher_ = nh.advertise<std_msgs::Float32MultiArray>("/panda/residual", 1000);
-    resi_msg_.data.resize(num_joint);
 
     // Keyboard
     init_keyboard();
@@ -293,6 +292,9 @@ void PandaController::compute()
                 measured_ext_force_.setZero();
 
                 output_scaling << 124.64, 82.809, 122.57, 81.091, 11.176, 6.7371, 6.8228;
+
+                // ROS OCSVM
+                resi_msg_.data.resize(num_joint*num_seq);
 
                 // Sliding Mode Momentum Observer
                 p_.setZero();
@@ -682,6 +684,15 @@ void PandaController::writeBuffer()
         ring_buffer_idx_++;
         if (ring_buffer_idx_ == num_seq)
             ring_buffer_idx_ = 0;
+
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            resi_buffer_[resi_buffer_idx_*num_joint + i] = estimated_ext_torque_LSTM_(i);
+        }
+        
+        resi_buffer_idx_++;
+        if (resi_buffer_idx_ == num_seq)
+            resi_buffer_idx_ = 0;
     }
 }
 
@@ -691,30 +702,30 @@ void PandaController::logData()
     {
         writeFile << cur_time_ << "\t";
 
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_dot_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_dot_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << q_ddot_desired_(i) << "\t";
-        }
-        for (int i = 0; i < dc_.num_dof_; i++)
-        {
-            writeFile << control_input_filtered_(i) << "\t";
-        }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_dot_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_dot_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << q_ddot_desired_(i) << "\t";
+        // }
+        // for (int i = 0; i < dc_.num_dof_; i++)
+        // {
+        //     writeFile << control_input_filtered_(i) << "\t";
+        // }
 
         // int cur_idx = 0;
         // if (ring_buffer_idx_ == 0)
@@ -731,10 +742,10 @@ void PandaController::logData()
         //     writeFile << network_output_share_(i) << "\t";
         // }
         
-        // for (int i = 0; i < dc_.num_dof_; i++)
-        // {
-        //     writeFile << estimated_ext_torque_LSTM_(i) << "\t";
-        // }
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            writeFile << estimated_ext_torque_LSTM_(i) << "\t";
+        }
         // for (int i = 0; i < dc_.num_dof_; i++)
         // {
         //     writeFile << measured_ext_torque_(i) << "\t";
@@ -818,8 +829,22 @@ void PandaController::computeExtForce()
 
 void PandaController::publishResidual()
 {
-    for(int i = 0; i < dc_.num_dof_; i++)
-        resi_msg_.data[i] = estimated_ext_torque_LSTM_(i);
+    int cur_idx = 0;
+    if (resi_buffer_idx_ == 0)
+        cur_idx = num_seq - 1;
+    else
+        cur_idx = resi_buffer_idx_ - 1;
+
+    for (int seq = 0; seq < num_seq; seq++)
+    {
+        for (int i=0; i < num_joint; i++)
+        {
+            int process_data_idx = cur_idx+seq+1;
+            if (process_data_idx >= num_seq)
+                process_data_idx -= num_seq;
+           resi_msg_.data[num_joint*seq + i] = resi_buffer_[process_data_idx*num_joint + i];
+        }
+    }
     resi_publisher_.publish(resi_msg_);
 }
 
@@ -842,7 +867,7 @@ void PandaController::printData()
         std::cout <<"HOFTO Ext: " << estimated_ext_torque_HOFTO_(0) <<std::setw(12)<< estimated_ext_torque_HOFTO_(1) <<std::setw(12)<< estimated_ext_torque_HOFTO_(2) <<std::setw(12) << estimated_ext_torque_HOFTO_(3) <<std::setw(12)<< estimated_ext_torque_HOFTO_(4) <<std::setw(12)<< estimated_ext_torque_HOFTO_(5) <<std::setw(12)<< estimated_ext_torque_HOFTO_(6) <<std::endl;
         
 
-                std::cout<<"dt: " << cur_time_ - pre_time_ << std::endl;
+        std::cout<<"dt: " << cur_time_ - pre_time_ << std::endl;
 
         std::cout << std::endl;
     }

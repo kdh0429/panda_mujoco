@@ -141,10 +141,6 @@ class PandaController{
         bool init_traj_prepared_ = false;
         bool next_traj_prepared_ = false;
 
-        // Residual publish
-        ros::Publisher resi_publisher_;
-        std_msgs::Float32MultiArray resi_msg_;
-
         // Torch
         static const int num_seq = 5;
         static const int num_features = 2;
@@ -189,6 +185,13 @@ class PandaController{
         Eigen::Matrix<float, num_features*num_joint, 1> forward_network_output_;
         
         Eigen::Vector7d network_output_share_;
+
+
+        // Residual publish
+        ros::Publisher resi_publisher_;
+        std_msgs::Float32MultiArray resi_msg_;
+        float resi_buffer_[num_seq*num_joint];
+        int resi_buffer_idx_ = 0;
 
 
         // Force Control

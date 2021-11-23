@@ -48,7 +48,7 @@
                                     <joint name="panda0_joint7" range="-2.8973 2.8973" axis="0 0 1" class="panda_forearm"/>
                                     <geom class="panda_viz" mesh="link7_viz"/>
                                     <geom class="panda_col" mesh="link7_col" mass="0.2"/>
-                                    <!-- <site name="FT" pos="0 0 0"/> -->
+                                    <site name="FT" pos="0 0 0"/>
                                     <!-- End Effector attaches here-->
 
                                 </body>
