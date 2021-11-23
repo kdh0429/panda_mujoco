@@ -16,7 +16,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     DataContainer dc;
 
-    int control_mode = PositionControl;
+    int control_mode = TorqueControl;
 
     MujocoInterface mujoco_interface(nh, dc);
     PandaController panda_controller(nh, dc, control_mode);
@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, control_mode);
     thread[3] = std::thread(&PandaController::generateRandTrajThread, &panda_controller);
 
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
     {
         thread[i].join();
     }

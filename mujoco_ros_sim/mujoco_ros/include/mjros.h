@@ -25,56 +25,13 @@
 #include <sensor_msgs/JointState.h>
 #include <tf/transform_datatypes.h>
 
+#include <deque>
+
 #ifdef COMPILE_SHAREDMEMORY
 #include "shm_msgs.h"
 SHMmsgs *mj_shm_;
-void init_mjshm()
-{
-    if ((shm_msg_id = shmget(shm_msg_key, sizeof(SHMmsgs), IPC_CREAT | 0666)) == -1)
-    {
-        std::cout << "shm mtx failed " << std::endl;
-        exit(0);
-    }
+int shm_msg_id;
 
-    if ((mj_shm_ = (SHMmsgs *)shmat(shm_msg_id, NULL, 0)) == (SHMmsgs *)-1)
-    {
-        std::cout << "shmat failed " << std::endl;
-        exit(0);
-    }
-
-    if (shmctl(shm_msg_id, SHM_LOCK, NULL) == 0)
-    {
-        //std::cout << "SHM_LOCK enabled" << std::endl;
-    }
-    else
-    {
-        std::cout << "SHM lock failed" << std::endl;
-    }
-
-    mj_shm_->t_cnt = 0;
-    mj_shm_->t_cnt2 = 0;
-    mj_shm_->controllerReady = false;
-    mj_shm_->statusWriting = false;
-    mj_shm_->commanding = false;
-    mj_shm_->reading = false;
-    mj_shm_->shutdown = false;
-
-    //
-    //float lat_avg, lat_min, lat_max, lat_dev;
-    //float send_avg, send_min, send_max, send_dev;
-
-    mj_shm_->lat_avg2 = 0;
-    mj_shm_->lat_min2 = 0;
-    mj_shm_->lat_max2 = 100000;
-    mj_shm_->lat_dev2 = 0;
-
-    mj_shm_->send_avg2 = 0;
-    mj_shm_->send_min2 = 0;
-    mj_shm_->send_max2 = 100000;
-    mj_shm_->send_dev2 = 0;
-
-    //std::cout << "shm master initialized" << std::endl;
-}
 #define USE_SHM true
 #else
 #define USE_SHM false
@@ -113,6 +70,8 @@ mjuiState uistate;
 mjUI ui0, ui1;
 
 int key_ui = 0;
+
+int com_latency = 0;
 
 // UI settings not contained in MuJoCo structures
 struct setting_
@@ -229,6 +188,9 @@ mjuiDef defSimulation[] =
         {mjITEM_BUTTON, "Key + ", 2, NULL, " #266"},
         {mjITEM_BUTTON, "Key - ", 2, NULL, " #267"},
         {mjITEM_STATIC, "Key", 2, NULL, " 0"},
+        {mjITEM_BUTTON, "Latency + ", 2, NULL, ""},
+        {mjITEM_BUTTON, "Latency - ", 2, NULL, ""},
+        {mjITEM_STATIC, "Latency", 2, NULL, " 0"},
         {mjITEM_BUTTON, "Reset to key", 3, NULL, " #259"},
         {mjITEM_BUTTON, "Set key", 3},
         {mjITEM_END}};
@@ -315,7 +277,7 @@ void uiEvent(mjuiState *state);
 void prepare(void);
 void render(GLFWwindow *window);
 void simulate(void);
-void init(std::string key_file);
+void init();
 void rosPollEvents();
 
 std::mutex mtx;
@@ -355,7 +317,6 @@ bool reset_request = false;
 bool pause_check = true;
 
 bool pub_total_mode = false;
-std::string robot_type = "master";
 
 bool use_shm = false;
 
@@ -371,6 +332,10 @@ ros::Duration ros_sim_runtime;
 ros::Time sync_time_test;
 
 std::string ctrlstat = "Missing";
+
+std::vector<float> ctrl_command_temp_;
+
+std::deque<std::vector<float>> ctrl_cmd_que_;
 
 mjtNum *ctrl_command;
 mjtNum *ctrl_command2;

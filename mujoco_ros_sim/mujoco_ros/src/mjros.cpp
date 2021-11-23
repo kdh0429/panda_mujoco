@@ -145,6 +145,7 @@ void state_publisher_init()
     joint_set_msg_.torque.resize(m->nu);
     command.resize(m->nu);
     command2.resize(m->nbody * 6);
+    ctrl_command_temp_.resize(m->nu);
 
     for (int i = 0; i < m->nu; i++)
     {
@@ -283,11 +284,9 @@ void state_publisher()
             {
                 joint_state_msg_.position[i] = d->qpos[i];
                 joint_state_msg_.velocity[i] = d->qvel[i];
-                // joint_state_msg_.effort[i] = d->qfrc_inverse[i]-d->qfrc_applied[i]-d->qfrc_actuator[i];
                 joint_state_msg_.effort[i] = d->qacc[i];
             }
         }
-        // std::cout << "External: " << joint_state_msg_.effort[0] << std::endl;
 
         for (int i = 0; i < m->nsensor; i++)
         {
@@ -317,7 +316,7 @@ void state_publisher()
             sensor_state_pub.publish(sensor_state_msg_);
             joint_state_pub.publish(joint_state_msg_);
             sim_time_pub.publish(sim_time);
-        }   
+        }
     }
     else
     {
@@ -482,30 +481,28 @@ void mycontroller(const mjModel *m, mjData *d)
                 cmd_rcv = true;
                 //std::copy(mj_shm_->torqueCommand, mj_shm_->torqueCommand + m->nu, ctrl_command);
                 for (int i = 0; i < m->nu; i++)
-                    ctrl_command[i] = mj_shm_->torqueCommand[i];
+                    ctrl_command_temp_[i] = mj_shm_->torqueCommand[i];
 #else
                 std::cout << "WARNING : Getting command, while SHM_NOT_COMPILED " << std::endl;
 #endif
             }
             else
             {
-                // memcpy(ctrl_command, &command[0], m->nu * sizeof(float));
-                for (int i = 0; i < m->nu; i++)
-                {
-                   ctrl_command[i] = command[i];
-                }
+                std::copy(command.begin(), command.end(), ctrl_command_temp_.begin());
             }
-            // for (int i = 0; i < m->nu; i++)
-            // {
-            //     ctrl_command[i] = command[i];
-            // }
-            // if (custom_ft_applied)
-            // {
-            //     for (int i = 0; i < m->nbody * 6; i++)
-            //     {
-            //         ctrl_command2[i] = command2[i];
-            //     }
-            // }
+
+            static int clat_l = 0;
+
+            ctrl_cmd_que_.push_back(ctrl_command_temp_);
+
+            std::copy(ctrl_cmd_que_[0].begin(), ctrl_cmd_que_[0].end(), ctrl_command);
+
+            while (ctrl_cmd_que_.size() > com_latency)
+            {
+                ctrl_cmd_que_.pop_front();
+            }
+
+            clat_l = com_latency;
 
             if (!settings.controlui)
             {
@@ -518,6 +515,7 @@ void mycontroller(const mjModel *m, mjData *d)
                     mju_copy(d->xfrc_applied, ctrl_command2, m->nbody * 6);
                 }
             }
+
             ROS_INFO_COND(settings.debug == 1, "MJ_TIME:%10.5f ros:%10.5f dif:%10.5f", d->time, ros_sim_runtime.toSec(), d->time - ros_sim_runtime.toSec());
             ROS_INFO_COND(settings.debug == 1, "TEST FOR THERE ");
 
@@ -1568,11 +1566,31 @@ void uiEvent(mjuiState *state)
                 c_reset();
                 break;
 
-            case 8: // Reset to key
+            case 8: // Latency ++
+                com_latency++;
+                char com_key[10];
+                //std::cout << "com_latency ++" << std::endl;
+                sprintf(com_key, "%5.2f ms", (com_latency * m->opt.timestep * 1000.0));
+                strcpy(ui0.sect[SECT_SIMULATION].item[10].multi.name[0], com_key);
+                mjui_update(-1, -1, &ui0, &uistate, &con);
+                break;
+
+            case 9: // Latency --
+                com_latency--;
+                if (com_latency < 0)
+                    com_latency = 0;
+                com_key[10];
+                //std::cout << "com_latency --" << std::endl;
+                sprintf(com_key, "%5.2f ms", (com_latency * m->opt.timestep * 1000.0));
+                strcpy(ui0.sect[SECT_SIMULATION].item[10].multi.name[0], com_key);
+                mjui_update(-1, -1, &ui0, &uistate, &con);
+                break;
+
+            case 11: // Reset to key
                 c_reset();
                 break;
 
-            case 9: // Set key
+            case 12: // Set key
                 i = settings.key;
                 m->key_time[i] = d->time;
                 mju_copy(m->key_qpos + i * m->nq, d->qpos, m->nq);
@@ -2164,7 +2182,7 @@ void simulate(void)
 //-------------------------------- init and main ----------------------------------------
 
 // initalize everything
-void init(std::string key_file)
+void init()
 {
     // print version, check compatibility
     printf("MuJoCo Pro version %.2lf\n", 0.01 * mj_version());
@@ -2173,7 +2191,7 @@ void init(std::string key_file)
 
     // activate MuJoCo license
     //ROS_INFO("license file located at %s", key_file.c_str());
-    mj_activate(key_file.c_str());
+    // mj_activate(key_file.c_str());
 
     // init GLFW, set timer callback (milliseconds)
     if (!glfwInit())

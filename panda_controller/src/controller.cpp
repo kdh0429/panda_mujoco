@@ -27,6 +27,10 @@ PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc, int con
     // Torch
     loadNetwork();
 
+    // Ros
+    resi_publisher_ = nh.advertise<std_msgs::Float32MultiArray>("/panda/residual", 1000);
+    resi_msg_.data.resize(num_joint);
+
     // Keyboard
     init_keyboard();
 
@@ -401,7 +405,9 @@ void PandaController::compute()
 
                 computeControlInput();  
 
-                printData();                
+                // printData();            
+
+                publishResidual();    
 
                 pre_time_ = cur_time_;
             }
@@ -482,60 +488,60 @@ void PandaController::updateKinematicsDynamics()
 
 void PandaController::computeControlInput()
 {
-    // if(mode_ == MODE_RANDOM)
-    // {
-    //     if (cur_time_ >= traj_init_time_ + traj_duration_ + 1.0)
-    //     {   
-    //         random_plan_ = random_plan_next_;
-    //         cur_waypoint_ = 0;
-    //         traj_init_time_ = cur_time_;//ros::Time::now().toSec();
-    //         total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
-    //         traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
+    if(mode_ == MODE_RANDOM)
+    {
+        if (cur_time_ >= traj_init_time_ + traj_duration_ + 1.0)
+        {   
+            random_plan_ = random_plan_next_;
+            cur_waypoint_ = 0;
+            traj_init_time_ = cur_time_;//ros::Time::now().toSec();
+            total_waypoints_ = random_plan_.trajectory_.joint_trajectory.points.size();
+            traj_duration_ = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].time_from_start.toSec();
 
-    //         next_traj_prepared_ = false; 
-    //         std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
-    //         std::cout<<"New Trajectory!"<< std::endl;
-    //         std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
-    //         std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
-    //         std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
-    //         std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
-    //     }
-    //     else if (cur_time_ >= traj_init_time_ + traj_duration_)
-    //     {
-    //         // Rest
-    //     }
-    //     else if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
-    //     {
-    //         if (cur_waypoint_ < total_waypoints_-2)
-    //             cur_waypoint_++;
-    //     }
+            next_traj_prepared_ = false; 
+            std::vector<double> way = random_plan_.trajectory_.joint_trajectory.points[total_waypoints_-1].positions;
+            std::cout<<"New Trajectory!"<< std::endl;
+            std::cout<<"Total Waypoint: "<< total_waypoints_ << std::endl;
+            std::cout << "Start Pose: " << q_(0) << " " << q_(1) << " " << q_(2) << " " << q_(3) << " " << q_(4) << " " << q_(5) << " " << q_(6) << std::endl;
+            std::cout << "Target Pose: " << way[0] << " " << way[1] << " " << way[2] << " " << way[3] << " " << way[4] << " " << way[5] << " " << way[6] << std::endl;
+            std::cout<<"Trajetory Duration: " << traj_duration_ << std::endl << std::endl;
+        }
+        else if (cur_time_ >= traj_init_time_ + traj_duration_)
+        {
+            // Rest
+        }
+        else if (cur_time_ >= traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec())
+        {
+            if (cur_waypoint_ < total_waypoints_-2)
+                cur_waypoint_++;
+        }
         
-    //     double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
-    //     double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
+        double way_point_start_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].time_from_start.toSec();
+        double way_point_end_time = traj_init_time_ + random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].time_from_start.toSec();
 
-    //     std::vector<Eigen::Vector3d> traj;
-    //     traj.resize(dc_.num_dof_);
+        std::vector<Eigen::Vector3d> traj;
+        traj.resize(dc_.num_dof_);
 
-    //     for (int i = 0; i < dc_.num_dof_; i++)
-    //     {
-    //         double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
-    //         double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
-    //         double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
-    //         double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
-    //         double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
-    //         double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
+        for (int i = 0; i < dc_.num_dof_; i++)
+        {
+            double init_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].positions[i];
+            double init_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].velocities[i];
+            double init_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_].accelerations[i];
+            double target_q = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].positions[i];
+            double target_q_dot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].velocities[i];
+            double target_q_ddot = random_plan_.trajectory_.joint_trajectory.points[cur_waypoint_+1].accelerations[i];
 
-    //         traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
+            traj[i] = quintic_spline(cur_time_, way_point_start_time, way_point_end_time, init_q, init_q_dot, init_q_ddot, target_q, target_q_dot, target_q_ddot);
 
-    //         q_desired_(i) = traj[i](0);
-    //         q_dot_desired_(i) = traj[i](1);
-    //         q_ddot_desired_(i) = traj[i](2);
-    //     }
+            q_desired_(i) = traj[i](0);
+            q_dot_desired_(i) = traj[i](1);
+            q_ddot_desired_(i) = traj[i](2);
+        }
 
-    //     control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
-    // }
+        control_input_ = A_*(q_ddot_desired_ + kv*(q_dot_desired_ - q_dot_) + kp * (q_desired_ - q_))+ non_linear_;
+    }
 
-    if (mode_ == MODE_HOME)
+    else if (mode_ == MODE_HOME)
     {
         Eigen::VectorXd q_target;
         q_target.resize(dc_.num_dof_);
@@ -659,7 +665,7 @@ void PandaController::computeControlInput()
         control_input_filtered_(i) = lowPassFilter(control_input_(i), control_input_filtered_(i), 1/hz_, 20);
     }
     
-    dc_.control_input_ = control_input_;
+    dc_.control_input_ = control_input_; 
 }
 
 void PandaController::writeBuffer()
@@ -808,6 +814,13 @@ void PandaController::computeExtForce()
     estimated_ext_force_HOFTO_ = j_dyn_cons_inv_T_*estimated_ext_torque_HOFTO_;
 
     measured_ext_force_ = j_dyn_cons_inv_T_*measured_ext_torque_;
+}
+
+void PandaController::publishResidual()
+{
+    for(int i = 0; i < dc_.num_dof_; i++)
+        resi_msg_.data[i] = estimated_ext_torque_LSTM_(i);
+    resi_publisher_.publish(resi_msg_);
 }
 
 void PandaController::printData()

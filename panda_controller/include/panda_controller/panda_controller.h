@@ -25,6 +25,8 @@
 #include <torch/script.h> 
 #include <fstream>
 
+#include <std_msgs/Float32MultiArray.h>
+
 # define MODE_INIT 105
 # define MODE_HOME 104
 # define MODE_RANDOM 114
@@ -54,6 +56,7 @@ class PandaController{
         void computeSOSML();
         void computeESO();
         void computeHOFTO();
+        void publishResidual();
 
     private:
         double hz_ = 2000;
@@ -137,6 +140,10 @@ class PandaController{
 
         bool init_traj_prepared_ = false;
         bool next_traj_prepared_ = false;
+
+        // Residual publish
+        ros::Publisher resi_publisher_;
+        std_msgs::Float32MultiArray resi_msg_;
 
         // Torch
         static const int num_seq = 5;
