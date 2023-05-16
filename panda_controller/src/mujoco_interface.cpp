@@ -60,15 +60,6 @@ void MujocoInterface::simStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr
             dc_.q_dot_[j] = msg->velocity[j];
             dc_.effort_[j] = msg->effort[j];
         }
-
-        for (int i=0; i< msg->sensor.size(); i++)
-        {
-            if (msg->sensor[i].name == "Force_sensor")
-                {
-                    for (int j=0; j<3; j++)
-                        dc_.force_[j] = msg->sensor[i].data[j];
-                }
-        }
         dc_.sim_time_ = msg->time;
     }
 }

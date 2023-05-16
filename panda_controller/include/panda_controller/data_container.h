@@ -18,7 +18,6 @@ class DataContainer
         Eigen::VectorXd q_;
         Eigen::VectorXd q_dot_;
         Eigen::VectorXd effort_;
-        Eigen::Vector3d force_;
 
         Eigen::VectorXd control_input_;
 };

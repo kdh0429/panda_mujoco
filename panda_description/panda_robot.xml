@@ -1,0 +1,20 @@
+<mujoco model="panda_robot">
+
+<!-- ========================================
+Reference
+
+https://mujoco.readthedocs.io/en/stable/APIreference.html
+https://mujoco.readthedocs.io/en/latest/computation.html
+
+======================================== -->
+
+    <include file="assets/assets.xml"/>
+    
+    <worldbody>
+        <include file="assets/basic_scene.xml" />    
+        <include file="assets/panda.urdf.xml" />   
+    </worldbody>
+
+    <include file = 'assets/panda_actuator.xml' />
+
+</mujoco>
