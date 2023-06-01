@@ -19,8 +19,10 @@
 
 
         <include file="assets/chain0_nogripper.xml"/>
+        <include file="assets/chain1_nogripper.xml"/>
     </worldbody>
 
     <include file='assets/actuator0_nogripper.xml'/>
+    <include file='assets/actuator1_nogripper.xml'/>
 
 </mujoco>
