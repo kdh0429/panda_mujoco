@@ -10,7 +10,7 @@
   <node name ="mujoco_ros" pkg = "mujoco_ros" type = "mujoco_ros" required = "true" respawn = "false" output = "screen">
     <!-- <param name="license" type="string" value="$(env HOME)/mjkey.txt" /> -->
     <param name = "license" type = "string" value = "$(find mujoco_ros)/mujoco210/bin/mjkey.txt" />
-    <param name="model_file" type="string" value="$(find panda_description)/franka_panda_arm.xml"/>
+    <param name="model_file" type="string" value="$(find panda_description)/franka_panda_arm_position.xml"/>
     <param name="pub_mode" value="$(arg pub_mode)"/>
     <!-- <param name="robot_description" value="$(find panda_description)/robots/panda_arm.urdf"/> -->
 

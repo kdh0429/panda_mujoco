@@ -2,7 +2,7 @@
 
 PandaController::PandaController(ros::NodeHandle &nh, DataContainer &dc) : dc_(dc)
 {
-    dc_.sim_mode_ = "torque";
+    dc_.sim_mode_ = "position";
     
     right_arm_.id_ = "right_arm";
     left_arm_.id_ = "left_arm";
@@ -106,7 +106,8 @@ void PandaController::computeControlInput()
     {
         for (int i = 0; i <DOF; i++)
         {
-            robot->control_input_(i) = robot->g_(i);
+            // robot->control_input_(i) = robot->g_(i);
+            robot->control_input_(i) = M_PI/6;
         }
     }
 

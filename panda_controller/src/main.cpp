@@ -22,7 +22,7 @@ int main(int argc, char **argv)
     std::thread thread[5];
     thread[0] = std::thread(&MujocoInterface::stateUpdate, &mujoco_interface);
     thread[1] = std::thread(&PandaController::compute, &panda_controller);
-    thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, TorqueControl);
+    thread[2] = std::thread(&MujocoInterface::sendCommand, &mujoco_interface, PositionControl);
 
     for (int i = 0; i < 3; i++)
     {
