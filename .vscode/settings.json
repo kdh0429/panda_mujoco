@@ -63,5 +63,6 @@
         "set": "cpp",
         "string": "cpp",
         "core": "cpp"
-    }
+    },
+    "ros.distro": "noetic"
 }
