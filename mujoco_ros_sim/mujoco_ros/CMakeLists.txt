@@ -10,12 +10,6 @@ find_package(catkin REQUIRED COMPONENTS
   eigen_conversions
 )
 
-find_package(tocabi_lib COMPONENTS)
-IF(tocabi_lib_FOUND)
- message(" -- shm mode enabled" )
-   ADD_DEFINITIONS(-DCOMPILE_SHAREDMEMORY)
-ENDIF()
-
 set(MUJOCO_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../mujoco210)
 
 message("MuJoCo path: " ${MUJOCO_PATH})
@@ -35,12 +29,6 @@ include_directories(
 link_directories(
   ${MUJOCO_PATH}/bin
 )
-
-IF(tocabi_lib_FOUND)
-include_directories(
-  ${tocabi_lib_INCLUDE_DIRS}
-)
-ENDIF()
 
 file(GLOB LIB_MUJOCO ${MUJOCO_PATH}/bin/libmujoco210.so)
 
