@@ -104,10 +104,19 @@ void PandaController::computeControlInput()
 {
     for (auto &robot: robots_)
     {
-        for (int i = 0; i <DOF; i++)
+        if (robot->id_ == "right_arm")
         {
-            // robot->control_input_(i) = robot->g_(i);
-            robot->control_input_(i) = M_PI/6;
+            for (int i = 0; i <DOF; i++)
+            {
+                robot->control_input_(i) = robot->g_(i);
+            }
+        }
+        else if (robot->id_ == "left_arm")
+        {
+            for (int i = 0; i < DOF; i++)
+            {
+                robot->control_input_(i) = M_PI / 6.0;
+            }
         }
     }
 

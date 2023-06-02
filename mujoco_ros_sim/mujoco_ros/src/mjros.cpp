@@ -68,29 +68,34 @@ void jointset_callback(const mujoco_ros_msgs::JointSetConstPtr &msg)
     {
         //MODE 0 position
         //MODE 1 torque
-        if (msg->MODE == 1)
+        // if (msg->MODE == 1)
+        // {
+        //     if (joint_set_msg_.torque.size() == m->nu)
+        //     {
+        //         for (int i = 0; i < m->nu; i++)
+        //             command[i] = msg->torque[i];
+        //     }
+        //     else
+        //     {
+        //         ROS_ERROR("TORQUE_MODE :::: Actuator Size Not match ");
+        //     }
+        // }
+        // else if (msg->MODE == 0)
+        // {
+        //     if (joint_set_msg_.torque.size() == m->nu)
+        //     {
+        //         for (int i = 0; i < m->nu; i++)
+        //             command[i] = msg->position[i];
+        //     }
+        //     else
+        //     {
+        //         ROS_ERROR("POSITION_MODE ::::  Actuator Size Not match ");
+        //     }
+        // }
+        if (joint_set_msg_.torque.size() == m->nu)
         {
-            if (joint_set_msg_.torque.size() == m->nu)
-            {
-                for (int i = 0; i < m->nu; i++)
-                    command[i] = msg->torque[i];
-            }
-            else
-            {
-                ROS_ERROR("TORQUE_MODE :::: Actuator Size Not match ");
-            }
-        }
-        else if (msg->MODE == 0)
-        {
-            if (joint_set_msg_.torque.size() == m->nu)
-            {
-                for (int i = 0; i < m->nu; i++)
-                    command[i] = msg->position[i];
-            }
-            else
-            {
-                ROS_ERROR("POSITION_MODE ::::  Actuator Size Not match ");
-            }
+            for (int i = 0; i < m->nu; i++)
+                command[i] = msg->position[i];
         }
     }
 }

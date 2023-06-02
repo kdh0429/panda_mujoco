@@ -71,37 +71,41 @@ void MujocoInterface::sendCommand(int control_mode)
     {
         if (!is_first_callback)
         {                
-            if (control_mode == 1)
-            {
-                if (dc_.sim_mode_ == "torque")
-                {
-                    mujoco_joint_set_msg_.MODE = 1;
+            // if (control_mode == 1)
+            // {
+            //     if (dc_.sim_mode_ == "torque")
+            //     {
+            //         mujoco_joint_set_msg_.MODE = 1;
 
-                    for (int i = 0; i < dc_.num_dof_; i++)
-                    {
-                        mujoco_joint_set_msg_.torque[i] = dc_.control_input_[i];
-                    }
-                }
-                else
-                {
-                    std::cout << "COMMAND DISMATCH! -- mujoco mode : positon, controller mode : torque" << std::endl;
-                }
-            }
-            else if (control_mode == 0)
-            {
-                if (dc_.sim_mode_ == "position")
-                {
-                    mujoco_joint_set_msg_.MODE = 0;
+            //         for (int i = 0; i < dc_.num_dof_; i++)
+            //         {
+            //             mujoco_joint_set_msg_.torque[i] = dc_.control_input_[i];
+            //         }
+            //     }
+            //     else
+            //     {
+            //         std::cout << "COMMAND DISMATCH! -- mujoco mode : positon, controller mode : torque" << std::endl;
+            //     }
+            // }
+            // else if (control_mode == 0)
+            // {
+            //     if (dc_.sim_mode_ == "position")
+            //     {
+            //         mujoco_joint_set_msg_.MODE = 0;
 
-                    for (int i = 0; i < dc_.num_dof_; i++)
-                    {
-                        mujoco_joint_set_msg_.position[i] = dc_.control_input_[i];
-                    }
-                }
-                else
-                {
-                    std::cout << "COMMAND DISMATCH! -- mujoco mode : torque, controller mode : position" << std::endl;
-                }
+            //         for (int i = 0; i < dc_.num_dof_; i++)
+            //         {
+            //             mujoco_joint_set_msg_.position[i] = dc_.control_input_[i];
+            //         }
+            //     }
+            //     else
+            //     {
+            //         std::cout << "COMMAND DISMATCH! -- mujoco mode : torque, controller mode : position" << std::endl;
+            //     }
+            // } 
+            for (int i = 0; i < dc_.num_dof_; i++)
+            {
+                mujoco_joint_set_msg_.position[i] = dc_.control_input_[i];
             }
 
             mujoco_joint_set_msg_.header.stamp = ros::Time::now();
