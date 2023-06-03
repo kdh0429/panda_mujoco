@@ -35,6 +35,10 @@ void MujocoInterface::simStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr
         dc_.q_.setZero();
         dc_.q_dot_.setZero();
         dc_.effort_.setZero();
+        dc_.force_.resize(6);
+        dc_.force_.setZero();
+        dc_.torque_.resize(6);
+        dc_.torque_.setZero();
 
         for (int j=0; j<dc_.num_dof_; j++)
         {
@@ -60,6 +64,37 @@ void MujocoInterface::simStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr
             dc_.q_dot_[j] = msg->velocity[j];
             dc_.effort_[j] = msg->effort[j];
         }
+        for (int i=0; i< msg->sensor.size(); i++)
+        {
+            if (msg->sensor[i].name == "Force_sensor0")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.force_[j] = msg->sensor[i].data[j];
+                }
+            }
+            if (msg->sensor[i].name == "Force_sensor1")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.force_[j+3] = msg->sensor[i].data[j];
+                }
+            }
+            if (msg->sensor[i].name == "Torque_sensor0")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.torque_[j] = msg->sensor[i].data[j];
+                }
+            }
+            if (msg->sensor[i].name == "Torque_sensor1")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.torque_[j+3] = msg->sensor[i].data[j];
+                }
+            }
+        }
         dc_.sim_time_ = msg->time;
     }
 }
@@ -71,37 +106,41 @@ void MujocoInterface::sendCommand(int control_mode)
     {
         if (!is_first_callback)
         {                
-            if (control_mode == 1)
-            {
-                if (dc_.sim_mode_ == "torque")
-                {
-                    mujoco_joint_set_msg_.MODE = 1;
+            // if (control_mode == 1)
+            // {
+            //     if (dc_.sim_mode_ == "torque")
+            //     {
+            //         mujoco_joint_set_msg_.MODE = 1;
 
-                    for (int i = 0; i < dc_.num_dof_; i++)
-                    {
-                        mujoco_joint_set_msg_.torque[i] = dc_.control_input_[i];
-                    }
-                }
-                else
-                {
-                    std::cout << "COMMAND DISMATCH! -- mujoco mode : positon, controller mode : torque" << std::endl;
-                }
-            }
-            else if (control_mode == 0)
-            {
-                if (dc_.sim_mode_ == "position")
-                {
-                    mujoco_joint_set_msg_.MODE = 0;
+            //         for (int i = 0; i < dc_.num_dof_; i++)
+            //         {
+            //             mujoco_joint_set_msg_.torque[i] = dc_.control_input_[i];
+            //         }
+            //     }
+            //     else
+            //     {
+            //         std::cout << "COMMAND DISMATCH! -- mujoco mode : positon, controller mode : torque" << std::endl;
+            //     }
+            // }
+            // else if (control_mode == 0)
+            // {
+            //     if (dc_.sim_mode_ == "position")
+            //     {
+            //         mujoco_joint_set_msg_.MODE = 0;
 
-                    for (int i = 0; i < dc_.num_dof_; i++)
-                    {
-                        mujoco_joint_set_msg_.position[i] = dc_.control_input_[i];
-                    }
-                }
-                else
-                {
-                    std::cout << "COMMAND DISMATCH! -- mujoco mode : torque, controller mode : position" << std::endl;
-                }
+            //         for (int i = 0; i < dc_.num_dof_; i++)
+            //         {
+            //             mujoco_joint_set_msg_.position[i] = dc_.control_input_[i];
+            //         }
+            //     }
+            //     else
+            //     {
+            //         std::cout << "COMMAND DISMATCH! -- mujoco mode : torque, controller mode : position" << std::endl;
+            //     }
+            // } 
+            for (int i = 0; i < dc_.num_dof_; i++)
+            {
+                mujoco_joint_set_msg_.position[i] = dc_.control_input_[i];
             }
 
             mujoco_joint_set_msg_.header.stamp = ros::Time::now();
