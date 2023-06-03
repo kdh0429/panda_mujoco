@@ -65,6 +65,10 @@ void PandaController::compute()
             left_arm_.q_dot_ = dc_.q_dot_.tail(DOF);
             right_arm_.effort_ = dc_.effort_.head(DOF);
             left_arm_.effort_ = dc_.effort_.tail(DOF);
+            right_arm_.ft_.head(3) = dc_.force_.head(3);
+            right_arm_.ft_.tail(3) = dc_.torque_.head(3);
+            left_arm_.ft_.head(3) = dc_.force_.tail(3);
+            left_arm_.ft_.tail(3) = dc_.torque_.tail(3);
             m_dc_.unlock();
 
             updateKinematicsDynamics();

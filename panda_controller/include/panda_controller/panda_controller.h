@@ -41,6 +41,7 @@ class PandaController{
             Eigen::Vector7d q_dot_;
             Eigen::Vector7d q_dot_zero_;
             Eigen::Vector7d effort_;
+            Eigen::Vector6d ft_;
 
             // Kinematics & Dynamics
             RigidBodyDynamics::Model robot_model;

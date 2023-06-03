@@ -35,6 +35,10 @@ void MujocoInterface::simStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr
         dc_.q_.setZero();
         dc_.q_dot_.setZero();
         dc_.effort_.setZero();
+        dc_.force_.resize(6);
+        dc_.force_.setZero();
+        dc_.torque_.resize(6);
+        dc_.torque_.setZero();
 
         for (int j=0; j<dc_.num_dof_; j++)
         {
@@ -59,6 +63,37 @@ void MujocoInterface::simStatusCallback(const mujoco_ros_msgs::SimStatusConstPtr
             dc_.q_[j] = msg->position[j];
             dc_.q_dot_[j] = msg->velocity[j];
             dc_.effort_[j] = msg->effort[j];
+        }
+        for (int i=0; i< msg->sensor.size(); i++)
+        {
+            if (msg->sensor[i].name == "Force_sensor0")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.force_[j] = msg->sensor[i].data[j];
+                }
+            }
+            if (msg->sensor[i].name == "Force_sensor1")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.force_[j+3] = msg->sensor[i].data[j];
+                }
+            }
+            if (msg->sensor[i].name == "Torque_sensor0")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.torque_[j] = msg->sensor[i].data[j];
+                }
+            }
+            if (msg->sensor[i].name == "Torque_sensor1")
+            {
+                for (int j=0; j<3; j++)
+                {
+                    dc_.torque_[j+3] = msg->sensor[i].data[j];
+                }
+            }
         }
         dc_.sim_time_ = msg->time;
     }
