@@ -95,8 +95,8 @@ void PandaController::updateKinematicsDynamics()
         robot->j_.setZero();
         for (int i = 0; i<2; i++)
         {
-            robot->j_.block<3, 6>(i * 3, 0) = robot->j_temp_.block<3, 6>(3 - i * 3, 0);
-        }    
+            robot->j_.block<3, 7>(i * 3, 0) = robot->j_temp_.block<3, 7>(3 - i * 3, 0);
+        }  
 
         robot->x_dot_ = robot->j_ * robot->q_dot_;
 
